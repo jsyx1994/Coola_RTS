@@ -191,7 +191,7 @@ class SocketWrapperAI:
                     # pa = '[]'
                     # example
                     # if gs['time'] % 20 == 0:
-                    #     pa = '[{"unitID":22,"unitAction":{"type":1,"parameter":2,"unitType":""}}]'
+                    #     pa = '[{"unitID":22,"unitAction":{"type":1,"parameter":,"unitType":""}}]'
                     # send the encoded player actions string to client
                     self.client_socket.sendall(('%s\n' % pa).encode())
 

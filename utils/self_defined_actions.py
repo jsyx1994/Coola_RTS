@@ -6,12 +6,15 @@ WALL = 1
 ALLY = 2
 ENEMY = 3
 RESOURCE = 4
+BASE = 5
 
 
 class UnitActions:
     """
-    translating from java
+    transferring codes from java
     """
+
+    # actions codes
     TYPE_NONE = 0
     TYPE_MOVE = 1
     TYPE_HARVEST = 2
@@ -20,6 +23,7 @@ class UnitActions:
     TYPE_ATTACK_LOCATION = 5
     TYPE_NUMBER_OF_ACTION_TYPES = 6
 
+    # parameters
     DIRECTION_NONE = -1
     DIRECTION_UP = 0
     DIRECTION_RIGHT = 1
@@ -32,6 +36,9 @@ class UnitActions:
 
 class Action:
     def __init__(self, game_map):
+        """
+        :param game_map: the map to check conflicts for translating
+        """
         self.game_map = game_map
         self.json_act = '{"unitID": "", "unitAction":{"type":"", "parameter": -1, "x":-1,"y":-1, "unitType":""}}'
         self.dict_action = json.loads(self.json_act)
@@ -40,7 +47,15 @@ class Action:
         assert isinstance(uid, int)
         assert isinstance(act_code, int)
 
-    def probe(self,uid, x, y, dir):
+    def probe(self, uid, x, y, dir):
+        """
+        check conflicts and change them
+        :param uid: unit id
+        :param x:
+        :param y:
+        :param dir: direction
+        :return:
+        """
         action = self.dict_action
         unit_action = action['unitAction']
         x += UnitActions.DIRECTION_OFFSET_X[dir]
@@ -62,13 +77,15 @@ class Action:
             # action.format(uid, UnitActions.TYPE_HARVEST, dir, x, y)
         elif self.game_map[x][y] in (ALLY, WALL):
             unit_action['type'] = UnitActions.TYPE_NONE
+        elif self.game_map[x][y] == BASE:
+            unit_action['type'] = UnitActions.TYPE_RETURN
         print(action)
         return action
 
 
 class WorkerAction(Action):
     """
-    define the DIY actions
+    define the workers's DIY actions
     """
     NO_OP = 0
     UP = 1  # including moving and attacking behaviour
@@ -98,6 +115,7 @@ class WorkerAction(Action):
         x, y = location
         if act_code == WorkerAction.NO_OP:
             unit_action['type'] = UnitActions.TYPE_NONE
+
         elif act_code == WorkerAction.UP:
             dir = UnitActions.DIRECTION_UP
             action = self.probe(uid, x, y, dir)
