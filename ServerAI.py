@@ -1,107 +1,110 @@
 import socket
 import json
-from utils.rts import RtsUtils
+from game.rts import RtsUtils
+from multiprocessing import Process
 from ai.bot import Bot
-# @author: Jiawei, Y.
-# Main file to look at.
-# Methods you should look at:
-#       BabyAI.getAction(player, gs)
-#       policy(player, gs)
-# Currently, policy always returns "Do nothing until be killed."
-# For the details "parameter" and "type" in the return dict of 
-# policy, please check hardCodedJSON.py
+import torch
+from shared_models.model import ActorCritic
+from torch.distributions import Categorical
+import numpy as np
+from game.self_defined_actions import WorkerAction
+import torch.nn.functional as F
+import torch.optim as optim
+
+rts_utils = RtsUtils()
+critic = ActorCritic(actor=None)
+worker = ActorCritic(actor='Worker')
+
+# class ServerAI:
+#     """
+#     Python Version server.
+#
+#     This is nothing more than a simple python implementation of ``Runserverexample.java``.
+#
+#     serverAI creates a socket to listen to the given address and call ``SocketWrapperAI``
+#     for handling communication.
+#
+#     Parameters
+#     ----------
+#     ``serverSocket`` : socket, optional default None.
+#         The serverSocket for channeling.
+#         Initialize the server socket by this parameters.
+#
+#     ``host`` : string, optional default '127.0.0.1'.
+#
+#     ``port`` : int, optional default '9898'.
+#
+#     ``ai`` : object, optional default None.
+#         The ``ai`` used in server side.
+#
+#     ``DEBUG`` : int, optional default '1'.
+#         The debug parameter.
+#         Print intermediate process when set to '1'
+#     """
+#
+#     DEBUG = 1
+#
+#     def __init__(self, server_socket=None, host='127.0.0.1', port=9898, ai=None):
+#         self.server_socket = server_socket
+#         self.socket_addr = (host, port)
+#         self.ai = ai
+#
+#
+#         if server_socket is None:    # issue 1
+#             self.server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+#         else:
+#             self.server_socket = server_socket
+#
+#     def runServer(self):
+#         """
+#         run the server
+#
+#         Parameters
+#         ----------
+#         self: object
+#
+#         Returns
+#         -------
+#         None
+#         """
+#         client_number = 0    # issue 2 :self-play situation
+#         self.server_socket.bind(self.socket_addr)
+#         self.server_socket.listen(10)
+#         if self.DEBUG >= 1:
+#             print('Server is running')
+#         try:
+#             while True:
+#                 print('waiting for a connection')
+#                 client_socket, client_address = self.server_socket.accept()
+#                 SocketWrapperAI(client_socket, client_number, self.ai)
+#         finally:
+#             print('server_socket closed')
+#             self.server_socket.close()
 
 class ServerAI:
-    """
-    Python Version server.
+    def __init__(self, host='127.0.0.1', port=9898):
+        self.host = host
+        self.port = port
+        self.client_num = 0
 
-    This is nothing more than a simple python implementation of ``Runserverexample.java``.
+    def run_server(self):
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as ss:
+            ss.bind((self.host, self.port))
+            print('Waiting for a client connection...')
+            while 1:
+                ss.listen(10)
+                conn, addr = ss.accept()
+                self.client_num += 1
+                # print('incoming client {} conne')
 
-    serverAI creates a socket to listen to the given address and call ``SocketWrapperAI``
-    for handling communication.
-
-    Parameters
-    ----------
-    ``serverSocket`` : socket, optional default None.
-        The serverSocket for channeling.
-        Initialize the server socket by this parameters.
-    
-    ``host`` : string, optional default '127.0.0.1'.
-    
-    ``port`` : int, optional default '9898'.
-
-    ``ai`` : object, optional default None.
-        The ``ai`` used in server side.
-
-    ``DEBUG`` : int, optional default '1'.
-        The debug parameter.
-        Print intermediate process when set to '1'
-    """
-
-    DEBUG = 1
-
-    def __init__(self, server_socket=None, host='127.0.0.1', port=9898, ai=None):
-        self.socket_addr = (host, port)
-        self.ai = ai
-        if server_socket is None:    # issue 1
-            self.server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        else:
-            self.server_socket = server_socket
-
-    def runServer(self):
-        """
-        run the server
-
-        Parameters
-        ----------
-        self: object
-
-        Returns
-        -------
-        None
-        """
-        client_number = 0    # issue 2 :self-play situation
-        self.server_socket.bind(self.socket_addr)
-        self.server_socket.listen(10)
-        if self.DEBUG >= 1:
-            print('Server is running')
-        try:
-            while True:
-                print('waiting for a connection')
-                client_socket, client_address = self.server_socket.accept()
-                SocketWrapperAI(client_socket, client_number, self.ai)
-        finally:
-            self.server_socket.close()
+                handler = SocketWrapperAI(conn, self.client_num)
+                p = Process(target=handler.run_episodes, args=())
+                p.start()
 
 
 class SocketWrapperAI:
-    """
-    Python Version SocketWrapperAI.
-
-    SocketWrapperAI handle with welcome messages and acknowledgements between clients and server, 
-    as well as passing the game state information to the ``ai`` used in this server.
-
-    Parameters
-    ----------
-    ``DEBUG``: int, optional default '1'.
-        The debug parameter.
-        Print intermediate process when set to '1'
-    
-    ``utt``: object, optional default None.
-        ``UnityTypeTable``
-
-    ``ai``: object, optional default None.
-        ``ai``
-
-    All of the remaining parameters will be passed through serverAI, don't worry it.
-    
-    Notes
-    ---------
-    This is nothing more than a simple python implementation of ``JSONRunserverexample.java``.
-    However, some internal implementation details is different from santi's one.
-    """
-
     DEBUG = 1
+    GAMMA = 0.99
 
     def __init__(self, client_socket, client_number, ai=None):
         self.client_socket = client_socket
@@ -111,109 +114,192 @@ class SocketWrapperAI:
         self.ai = ai
         if self.DEBUG >= 1:
             print("New connection with client# {} at {}".format(client_number, client_socket))
-        self.run()
 
-    def run(self):
+        self.reward = []
+        self.targets = []
+        self.predicts = []
+        self.log_pi_sa = []
+        self.p_state = None
+
+        self.worker_sharing_counts = 0
+
+    def step(self, action):
+        pass
+
+    def init_new_episode(self):
+        self.reward = []
+        self.targets = []
+        self.log_pi_sa = []
+        self.p_state = None
+
+
+
+    def run_episodes(self):
         """
         If you don't understand the main logic behind santi's work, 
         please carefully go through the comments of this function.
         """
-        try:
+        with self.client_socket as client_socket:
             welcome = 'PyJSONSocketWrapperAI: you are client #%i\n' % self.client_number
-            self.client_socket.sendall(welcome.encode())
-            while True:
+            client_socket.sendall(welcome.encode())
+            while 1:
+
                 # retrieve the message from socket
-                msg = str(self.client_socket.recv(10240).decode())
+                msg = str(client_socket.recv(10240).decode())
+                # print(msg)
                 # print(msg)
                 # connection broken, retry.
                 if msg == 0:
                     break
-
                 # client closes the connection.
                 elif msg.startswith('end'):
-                    self.client_socket.close()
-                    exit(self)
+                    if self.DEBUG >= 1:
+                        print('end')
+                    raise NotImplementedError
+                    # self.client_socket.close()
+                    # exit(self)
 
                 # budget initialization
                 elif msg.startswith('budget'):
-                    msg = msg.split()
-                    self.ai.reset()
-                    self.ai.timeBudget = int(msg[1])
-                    self.ai.iterationsBudget = int(msg[2])
+                    """
+                    reset the environment
+                    """
                     if self.DEBUG >= 1:
-                        print("setting the budget to: {},{}".format(self.ai.timeBudget, self.ai.iterationsBudget))
+                        print('game reset')
+
+                    self.init_new_episode()
+                    # msg = msg.split()
+                    # self.ai.reset()
+                    # timeBudget = int(msg[1])
+                    # iterationsBudget = int(msg[2])
+                    # if self.DEBUG >= 1:
+                    #     print("setting the budget to: {},{}".format(self.ai.timeBudget, self.ai.iterationsBudget))
                     # send back ack
-                    self.client_socket.sendall('ack\n'.encode())
+                    client_socket.sendall('ack\n'.encode())
 
                     # utt initialization
                 elif msg.startswith('utt'):
+                    if self.DEBUG >= 1:
+                        print('utt')
 
                     msg = msg.split('\n')[1]
 
                     # json.loads() returns dict
                     self.utt = json.loads(msg)
 
-                    # reset ai with current utt
-                    self.ai.reset(self.utt)
-                    if self.DEBUG >= 1:
+                    if self.DEBUG >= 2:
                         print('setting the utt to: {}'.format(self.utt))
                         pass
 
                     # send back ack
-                    self.client_socket.sendall('ack\n'.encode())
+                    client_socket.sendall('ack\n'.encode())
 
                     # client asks server to return units actions for current game state
                 elif msg.startswith('getAction'):
+
                     # get player ID
                     player = int(msg.split()[1])  ### issue
                     # get game state
                     gs = msg.split('\n')[1]
                     # json.loads() returns dict
                     gs = json.loads(gs)
-                    rts_utils = RtsUtils(gs, player)
+                    rts_utils.reset(gs, player)
                     assignable = rts_utils.get_assignable()
-                    import torch
-                    if gs['time'] % 100 == 0:
+
+                    state = torch.from_numpy(rts_utils.parse_game_state()).float().unsqueeze(0)     # s(t)
+                    rt_1 = rts_utils.get_last_reward()
+                    vst = critic.forward(state)     # v(s_t)
+
+                    # calculate targets and predicts
+
+                    # print(self.p_state)
+                    if self.p_state is not None:
+                        vst_1 = critic.forward(self.p_state)
+                        target = rt_1 + self.GAMMA * vst_1
+                        predict = vst
+                        # print(self.worker_sharing_counts)
+                        for _ in range(self.worker_sharing_counts):
+                            self.targets.append(target)
+                            self.predicts.append(predict)
+                        # print(len(self.targets))
+                        # print(len(self.predicts))
+                        # print(len(self.log_pi_sa))
+
+                    self.worker_sharing_counts = 0
+
+                    if gs['time'] % 10 == 0:
                         for unit in assignable:
+                            location = int(unit['x']), int(unit['y'])
                             if unit['type'] == 'Worker':
-                                bot = Bot(bot_type='worker')
-                                rts_utils.translate_action(uid=unit['ID'], location=(int(unit['x']), int(unit['y'])),
-                                                           bot_type='worker', act_code=bot.decide(torch.randn(1, 20, 8, 8)))
+                                # print(worker.forward(state, loc=location))
+                                pi = worker.forward(state, loc=location)
+
+                                action = int(Categorical(pi).sample()[0])   # a(t)
+                                rts_utils.translate_action(uid=unit['ID'], location=location,
+                                                           bot_type='Worker', act_code=action)
+                                self.log_pi_sa.append(torch.log(pi[0][action]).view(1))
+                                self.worker_sharing_counts += 1
 
                     # print(rts_utils.get_assignable())
                     pa = rts_utils.get_player_action()
-                    if self.DEBUG >= 1:
+                    if self.DEBUG >= 2:
                         print('getAction for player {}'.format(player))
                         print('with game state %s' % gs)
 
-                    # call ai.getAction to return the player actions ##string##
-                    # pa = self.ai.get_action(player, gs)
-                    # pa = '[]'
-                    # example
-                    # if gs['time'] % 20 == 0:
-                    #     pa = '[{"unitID":22,"unitAction":{"type":1,"parameter":,"unitType":""}}]'
-                    # send the encoded player actions string to client
-                    self.client_socket.sendall(('%s\n' % pa).encode())
+                    client_socket.sendall(('%s\n' % pa).encode())
+
+                    self.p_state = state    # assign to previous states
 
                     if self.DEBUG >= 1:
                         print('action sent!')
 
                 # get preGameAnalysis
                 elif msg.startswith('preGameAnalysis'):
-                    print('get preGameAnalysis, it has not been implemented yet')
-                    pass
+                    if self.DEBUG >= 1:
+                        print('PreGameAnalysis')
+                    raise NotImplementedError
 
                 elif msg.startswith('gameOver'):
                     msg = msg.split()
                     winner = msg[1]
                     if self.DEBUG >= 1:
-                        print('gameOver %s' % winner)
-                    self.ai.game_over(winner)
-                    self.client_socket.sendall(('ack\n').encode())
-                    self.client_socket.close()
-        finally:
-            self.client_socket.close()
-            print('Connection with client# {} closed'.format(self.client_number))
+                        print('gameOver, winner is %s' % winner)
+                    # self.ai.game_over(winner)
+
+                    client_socket.sendall(('ack\n').encode())
+
+                    self.optimize()
+                    # self.client_socket.close()
+        # finally:
+        #     # self.client_socket.close()
+        #     print('Connection with client# {} closed'.format(self.client_number))
+
+    def optimize(self):
+        # print(self.log_pi_sa)
+        params = list(list(critic.parameters()) + list(worker.parameters()))
+        optimizer = optim.Adam(params=params, lr=1e-3)
+        log_pi_sa = torch.cat(self.log_pi_sa)
+        targets = torch.cat(self.targets)
+        predicts = torch.cat(self.predicts)
+        # print(log_pi_sa.requires_grad)
+        # print(targets.requires_grad)
+        # print(predicts.requires_grad)
+        # print(type(targets))
+        pg_loss = log_pi_sa * (targets - predicts)
+        td_error = F.mse_loss(targets, predicts)
+        ac_loss = -pg_loss.mean() + td_error
+        optimizer.zero_grad()
+        ac_loss.backward()
+        optimizer.step()
+        print("optimizing done")
+
+    @staticmethod
+    def select_action(unit_nn, state):
+        prediction = unit_nn.predict(state)
+        m = Categorical(prediction[0])
+        action = m.sample()
+        print(m, action)
+        return int(action[0])
 
 
 class BabyAI:
@@ -407,5 +493,6 @@ def policy(player, gs):
 
 if __name__ == "__main__":
     babyAI = BabyAI()
-    serverAI = ServerAI(ai=babyAI)
-    serverAI.runServer()
+    serverAI = ServerAI()
+    serverAI.run_server()
+
