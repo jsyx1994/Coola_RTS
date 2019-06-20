@@ -89,24 +89,22 @@ class ActorCritic(nn.Module):
     Critic net = Shared_\theta + Critic head
     Actor net = Shared_\theta + Actor head
     """
-    def __init__(self, actor=None):
+    def __init__(self, actor):
         super(ActorCritic, self).__init__()
         self.actor = actor
 
         self.base = Shared()    # loads saved shared weights
         self.in_features = self.base.last_shared_layer_dim
-        if actor:
-            self.pi_out = ActorHead(self.in_features, actor)   # loads saved actor head weights
-        else:
-            self.v_out = CriticHead(self.in_features)  # loads saved critic head weights
+        self.pi_out = ActorHead(self.in_features, actor)   # loads saved actor head weights
+        self.v_out = CriticHead(self.in_features)  # loads saved critic head weights
 
-    def forward(self, input, loc=None):
+    def forward(self, input, info='critic'):
         x = self.base(input)
         # print(x.size())
-        if loc:
-            return self.pi_out.forward(x, loc=loc)   # use both
-        else:
+        if info == 'critic':
             return self.v_out.forward(x)    # only use critic
+        else:
+            return self.pi_out.forward(x, loc=info)   # use both
 
     def __del__(self):
         pass

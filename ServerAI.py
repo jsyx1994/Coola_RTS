@@ -10,11 +10,10 @@ import numpy as np
 from game.self_defined_actions import WorkerAction
 import torch.nn.functional as F
 import torch.optim as optim
+import matplotlib.pyplot as plt
 
 rts_utils = RtsUtils()
-critic = ActorCritic(actor=None)
-worker = ActorCritic(actor='Worker')
-
+worker = ActorCritic(actor='Worker')    # output  critic or worker policy
 # class ServerAI:
 #     """
 #     Python Version server.
@@ -120,6 +119,9 @@ class SocketWrapperAI:
         self.predicts = []
         self.log_pi_sa = []
         self.p_state = None
+        self.G_0s = []
+        self.G_0 = 0
+
 
         self.worker_sharing_counts = 0
 
@@ -131,7 +133,10 @@ class SocketWrapperAI:
         self.targets = []
         self.log_pi_sa = []
         self.p_state = None
+        self.G_0 = 0
 
+
+        self.worker_sharing_counts = 0
 
 
     def run_episodes(self):
@@ -208,13 +213,14 @@ class SocketWrapperAI:
 
                     state = torch.from_numpy(rts_utils.parse_game_state()).float().unsqueeze(0)     # s(t)
                     rt_1 = rts_utils.get_last_reward()
-                    vst = critic.forward(state)     # v(s_t)
+                    vst = worker.forward(state, info='critic')     # v(s_t)
+                    self.G_0 += rt_1
 
                     # calculate targets and predicts
 
                     # print(self.p_state)
                     if self.p_state is not None:
-                        vst_1 = critic.forward(self.p_state)
+                        vst_1 = worker.forward(self.p_state, info='critic')
                         target = rt_1 + self.GAMMA * vst_1
                         predict = vst
                         # print(self.worker_sharing_counts)
@@ -232,7 +238,7 @@ class SocketWrapperAI:
                             location = int(unit['x']), int(unit['y'])
                             if unit['type'] == 'Worker':
                                 # print(worker.forward(state, loc=location))
-                                pi = worker.forward(state, loc=location)
+                                pi = worker.forward(state, info=location)
 
                                 action = int(Categorical(pi).sample()[0])   # a(t)
                                 rts_utils.translate_action(uid=unit['ID'], location=location,
@@ -268,6 +274,8 @@ class SocketWrapperAI:
 
                     client_socket.sendall(('ack\n').encode())
 
+                    self.G_0s.append(self.G_0)
+                    self.plot_durations()
                     self.optimize()
                     # self.client_socket.close()
         # finally:
@@ -276,8 +284,7 @@ class SocketWrapperAI:
 
     def optimize(self):
         # print(self.log_pi_sa)
-        params = list(list(critic.parameters()) + list(worker.parameters()))
-        optimizer = optim.Adam(params=params, lr=1e-3)
+        optimizer = optim.Adam(params=worker.parameters(), lr=1e-3)
         log_pi_sa = torch.cat(self.log_pi_sa)
         targets = torch.cat(self.targets)
         predicts = torch.cat(self.predicts)
@@ -300,6 +307,23 @@ class SocketWrapperAI:
         action = m.sample()
         print(m, action)
         return int(action[0])
+
+    def plot_durations(self):
+        plt.figure(1)
+        plt.clf()
+        durations_t = torch.tensor(self.G_0s, dtype=torch.float)
+        plt.title('Training...')
+        plt.xlabel('Episode')
+        # plt.ylabel('Duration')
+        plt.ylabel('Returns')
+        plt.plot(durations_t.numpy())
+        # Take 100 episode averages and plot them too
+        if len(durations_t) >= 100:
+            means = durations_t.unfold(0, 100, 1).mean(1).view(-1)
+            means = torch.cat((torch.zeros(99), means))
+            plt.plot(means.numpy())
+
+        plt.pause(0.001)  # pause a bit so that plots are updated
 
 
 class BabyAI:
