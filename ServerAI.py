@@ -91,7 +91,7 @@ class ServerAI:
             ss.bind((self.host, self.port))
             print('Waiting for a client connection...')
             while 1:
-                ss.listen(10)
+                ss.listen()
                 conn, addr = ss.accept()
                 self.client_num += 1
                 # print('incoming client {} conne')
@@ -131,6 +131,8 @@ class SocketWrapperAI:
     def init_new_episode(self):
         self.reward = []
         self.targets = []
+        self.predicts = []
+
         self.log_pi_sa = []
         self.p_state = None
         self.G_0 = 0
@@ -309,6 +311,7 @@ class SocketWrapperAI:
         return int(action[0])
 
     def plot_durations(self):
+        print(self.G_0s)
         plt.figure(1)
         plt.clf()
         durations_t = torch.tensor(self.G_0s, dtype=torch.float)
@@ -324,6 +327,20 @@ class SocketWrapperAI:
             plt.plot(means.numpy())
 
         plt.pause(0.001)  # pause a bit so that plots are updated
+
+        # Data for plotting
+        # t = np.arange(0.0, 2.0, 0.01)
+        # s = 1 + np.sin(2 * np.pi * t)
+        #
+        # fig, ax = plt.subplots()
+        # ax.plot(t, s)
+        #
+        # ax.set(xlabel='time (s)', ylabel='voltage (mV)',
+        #        title='About as simple as it gets, folks')
+        # ax.grid()
+        #
+        # fig.savefig("test.png")
+        # plt.show()
 
 
 class BabyAI:
