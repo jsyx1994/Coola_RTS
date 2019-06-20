@@ -129,6 +129,9 @@ class SocketWrapperAI:
         pass
 
     def init_new_episode(self):
+        global rts_utils
+        rts_utils = RtsUtils()
+
         self.reward = []
         self.targets = []
         self.predicts = []
