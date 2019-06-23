@@ -54,6 +54,7 @@ class ActorHead(nn.Module):
         return x
 
     def __del__(self):
+        # pass
         torch.save(self.state_dict(), model_saved_dir + '/' + self.model_name + '_head.pt')
         print(self.model_name + '_head.pt saved')
 

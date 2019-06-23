@@ -45,7 +45,7 @@ class Shared(nn.Module):
 
         self.conv1 = nn.Conv2d(in_channels=input_channel, out_channels=16, kernel_size=3, padding=1)   # WEIGHTs ARE INITED
         self.conv2 = nn.Conv2d(in_channels=16, out_channels=32, kernel_size=3, padding=1)
-        self.convLSTM = ConvLSTM(input_channels=32, hidden_channels=[16, self.last_lstm_dim], kernel_size=3)
+        # self.convLSTM = ConvLSTM(input_channels=32, hidden_channels=[16, self.last_lstm_dim], kernel_size=3)
         self.wv = Pic2Vector()
         self.self_attention = MultiHeadedAttention(h=4, d_model=32)
         self.flatten = Flatten()
@@ -59,7 +59,7 @@ class Shared(nn.Module):
         x = input
         x = F.relu(self.conv1(x))
         x = F.relu(self.conv2(x))
-        x, _internal_state = self.convLSTM(x, self.initial_state)    # will change the initial state
+        # x, self.initial_state = self.convLSTM(x, self.initial_state)    # will change the initial state
         # print(x.size())
         x = self.wv(x)
         # print("wv size:", x.size())
@@ -78,6 +78,7 @@ class Shared(nn.Module):
         save shared paras
         :return:
         """
+        # pass
         torch.save(self.state_dict(), model_saved_dir + '/shared.pt')
         print('shared saved')
 
@@ -107,8 +108,43 @@ class ActorCritic(nn.Module):
             return self.pi_out.forward(x, loc=info)   # use both
 
     def __del__(self):
-        pass
+        print('deleted')
+        # pass
 
+class TestLeakModel(nn.Module):
+    def __init__(self):
+        super(TestLeakModel,self).__init__()
+        self.conv1 = nn.Conv2d(in_channels=18, out_channels=16, kernel_size=3, padding=1)   # WEIGHTs ARE INITED
+        self.conv2 = nn.Conv2d(in_channels=16, out_channels=16, kernel_size=3,
+                               padding=1)  # WEIGHTs ARE INITED
+        self.conv3 = nn.Conv2d(in_channels=16, out_channels=16, kernel_size=3, padding=1)
+        self.conv4 = nn.Conv2d(in_channels=16, out_channels=16, kernel_size=3, padding=1)  # WEIGHTs ARE INITED
+        self.conv5 = nn.Conv2d(in_channels=16, out_channels=16, kernel_size=3,
+                               padding=1)  # WEIGHTs ARE INITED
+        self.fc1 = nn.Linear(in_features=64*16, out_features=128)
+        self.fc2 = nn.Linear(in_features=128, out_features=128)
+        self.fc3 = nn.Linear(in_features=128, out_features=128)
+        self.fc4 = nn.Linear(in_features=128, out_features=128)
+        self.fc5 = nn.Linear(in_features=128, out_features=128)
+        self.fc6 = nn.Linear(in_features=128, out_features=7)
+
+    def forward(self, input):
+        x = self.conv1(input)
+        x = self.conv2(x)
+        x = self.conv3(x)
+        x = self.conv4(x)
+        x = self.conv5(x)
+
+        x = Flatten()(x)
+        x = self.fc1(x)
+        x = self.fc2(x)
+        x = self.fc3(x)
+        x = self.fc4(x)
+        x = self.fc5(x)
+        x = self.fc6(x)
+
+        x = F.softmax(x)
+        return x
 
 def test():
     net = ActorCritic()
@@ -196,7 +232,6 @@ def test3():
             rts_utils.translate_action(uid=unit['ID'], location=(int(unit['x']), int(unit['y'])), bot_type='Worker',
                                        act_code=bot.decide(x))
     print(rts_utils.get_player_action())
-    pass
 
 
 def test4():
