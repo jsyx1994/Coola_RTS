@@ -102,10 +102,14 @@ class ActorCritic(nn.Module):
     def forward(self, input, info='critic'):
         x = self.base(input)
         # print(x.size())
-        if info == 'critic':
-            return self.v_out.forward(x)    # only use critic
+        if isinstance(info, torch.Tensor):
+            return self.pi_out.forward(x, loc=info)
         else:
-            return self.pi_out.forward(x, loc=info)   # use both
+            return self.v_out.forward(x)
+        # if info == 'critic':
+        #     return self.v_out.forward(x)    # only use critic
+        # else:
+        #     return self.pi_out.forward(x, loc=info)   # use both
 
     def __del__(self):
         print('deleted')

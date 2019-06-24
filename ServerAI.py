@@ -15,13 +15,14 @@ import matplotlib.pyplot as plt
 import torch.multiprocessing as tmp
 from collections import namedtuple
 
-
 Transition = namedtuple('Transition',
                         ('state', 'action', 'next_state', 'reward', 'location'))
 
 rts_utils = RtsUtils()
 # worker = ActorCritic(actor='Worker')    # output  critic or worker policy
 testmodel = TestLeakModel()
+
+
 # worker = ActorCritic(actor='Worker')
 
 
@@ -59,7 +60,8 @@ class SocketWrapperAI:
 
         self.worker_memory = []
         self.p_state = None
-        self.p_worker_info = {}   # a dict store all worker's actions {id->(action,location)}
+        self.p_worker_info = {}  # a dict store all worker's actions {id->(action,location)}
+        self.G0 = 0
 
     def step(self, action):
         pass
@@ -67,14 +69,6 @@ class SocketWrapperAI:
     def init_new_episode(self):
         if self.DEBUG == 3:
             import gc
-            # gc.collect()
-            # cnt = 0
-            # for obj in gc.get_objects():
-            #     try:
-            #         if torch.is_tensor(obj) or (hasattr(obj, 'data') and torch.is_tensor(obj.data)):
-            #             cnt += 1
-            #     except:
-            #         pass
             gc.collect()
             import objgraph
             objgraph.show_growth()
@@ -83,8 +77,9 @@ class SocketWrapperAI:
         worker = ActorCritic(actor='Worker')
 
         self.worker_memory = []
-        self.p_worker_info = {}   # a dict store all worker's actions {id->(action,location)}
+        self.p_worker_info = {}  # a dict store all worker's actions {id->(action,location)}
         self.p_state = None
+        self.G0 = 0
 
     def run_episodes(self):
         """
@@ -160,8 +155,9 @@ class SocketWrapperAI:
                     # units = rts_utils.get_self_units()  # unit
                     # print(busy)
 
-                    state = torch.from_numpy(rts_utils.parse_game_state()).unsqueeze(0).float()   # s(t)
+                    state = torch.from_numpy(rts_utils.parse_game_state()).unsqueeze(0).float()  # s(t)
                     p_r = rts_utils.get_last_reward()
+                    self.G0 += p_r
                     if p_r > 0:
                         x = 2
                         pass
@@ -184,13 +180,15 @@ class SocketWrapperAI:
                         if unit['type'] == 'Worker':
                             # print(worker.forward(state, loc=location))
                             # if rts_utils.is_assignable(unit):
-                            action = self.select_action(worker, state, info=location)
+                            loc = torch.LongTensor(location)
+                            action = self.select_action(worker, state, info=loc)
+
                             rts_utils.translate_action(uid=unit['ID'], location=location,
                                                        bot_type='Worker', act_code=action)
                             # print(type(unit['ID']))
-                            self.p_worker_info[str(unit['ID'])] = (action, location)
+                            self.p_worker_info[str(unit['ID'])] = (action, loc)
 
-                    self.p_state = state    # assign to previous states
+                    self.p_state = state  # assign to previous states
 
                     pa = rts_utils.get_player_action()
                     if self.DEBUG >= 2:
@@ -216,13 +214,17 @@ class SocketWrapperAI:
                     # self.ai.game_over(winner)
 
                     client_socket.sendall(('ack\n').encode())
-                    # self.plot_durations()
                     # tmp.set_start_method('fork')
                     # tmp.Process(target=self.optimize, args=()).start()
 
                     # add last
+                    p_r = rts_utils.get_last_reward()
+                    self.G0 += p_r
 
-                    # self.optimize()
+                    self.plot_durations()
+                    for i in self.p_worker_info.values():
+                        self.worker_memory.append(Transition(self.p_state, i[0], state, p_r, i[1]))
+                    self.optimize()
                     # self.client_socket.close()
 
     @staticmethod
@@ -234,32 +236,48 @@ class SocketWrapperAI:
         # worker = ActorCritic(actor='Worker')
         global worker
         # print(self.worker_memory)
+        print(worker)
+        optimizer = optim.Adam(params=worker.parameters(), lr=1e-3)
         batch = Transition(*zip(*self.worker_memory))
-        print(torch.Tensor(batch.location).size())
-        state_batch = batch.state
-        next_state_batch = batch.next_state
-        action_batch = batch.action
-        reward_batch = batch.reward
-        worker.forward(input=state_batch)
-        log_pi_sa = torch.log(state_batch)[action_batch]
-        print(batch)
-        # print(batch)
-        # print(self.log_pi_sa)
-        # optimizer = optim.Adam(params=worker.parameters(), lr=1e-3)
-        # log_pi_sa = torch.cat(self.log_pi_sa)
-        # targets = torch.cat(self.targets)
-        # predicts = torch.cat(self.predicts)
-        # # print(log_pi_sa.requires_grad)
-        # # print(targets.requires_grad)
-        # # print(predicts.requires_grad)
-        # # print(type(targets))
-        # pg_loss = log_pi_sa * (targets - predicts)
-        # td_error = F.mse_loss(targets, predicts)
-        # ac_loss = -pg_loss.mean() + td_error
-        # optimizer.zero_grad()
-        # ac_loss.backward()
-        # optimizer.step()
-        # print("optimizing done")
+        state_batch = torch.cat(batch.state)
+        next_state_batch = torch.cat(batch.next_state)
+        action_batch = torch.LongTensor(batch.action)
+        reward_batch = torch.Tensor(batch.reward)
+        # print(batch.location)
+        location_batch = torch.cat(batch.location)
+        # print(location_batch)
+        v_t = worker.forward(input=state_batch, info='critic')
+        print('v_t',v_t.size())
+        v_t_1 = worker.forward(input=next_state_batch, info='critic')
+        print('v_t_1',v_t_1.size())
+
+        # pi = worker.forward(input=state_batch, info=location_batch)
+        # pi_sa = worker.forward(input=state_batch, info=location_batch).gather(1, action_batch.unsqueeze(1)).squeeze()
+        # print('pi(a|s)', pi_sa)
+        log_pi_sa = torch.log(
+            worker.forward(input=state_batch, info=location_batch).gather(1, action_batch.unsqueeze(1)).squeeze())
+        print('log_pi_sa', log_pi_sa.size())
+        targets = reward_batch.unsqueeze(1) + self.GAMMA * v_t_1
+        print('targets', targets.size())
+        predicts = v_t
+        td_error = targets - predicts
+
+        pg_loss = log_pi_sa * td_error
+        ac_loss = -pg_loss.mean() +  F.mse_loss(targets, predicts)
+        print(ac_loss.size())
+
+        print('loss', pg_loss.mean().size(), F.mse_loss(targets, predicts).size())
+        optimizer.zero_grad()
+        ac_loss.backward(retain_graph=True)
+        optimizer.step()
+
+
+        print(state_batch.size())
+        print(state_batch.size())
+        print(next_state_batch.size())
+        print(action_batch.size())
+        print(reward_batch.size())
+
 
     def plot_durations(self):
         print(self.G_0s)
@@ -295,11 +313,10 @@ class SocketWrapperAI:
 
 
 def test():
-
     # for i in range(1000):
     #     worker = ActorCritic(actor='Worker')
     #     worker.forward(torch.rand(1, 18, 8, 8))
-        # testmodel.forward(torch.rand(1, 18, 8, 8))
+    # testmodel.forward(torch.rand(1, 18, 8, 8))
     # time.sleep(10)
     x = torch.randn((1, 18, 8, 8))
     import gc
@@ -309,17 +326,20 @@ def test():
         gc.collect()
         for i in range(10000):
             with torch.no_grad():
-                forward(testmodel,x)
+                forward(testmodel, x)
     # worker = ActorCritic(actor='Worker')
 
-def forward(model,x):
+
+def forward(model, x):
     return np.asarray(model.forward(x))
 
+
 def test1():
-    while(1):
+    while (1):
         worker = ActorCritic(actor='Worker')
         for i in range(3000):
-            worker.forward(torch.rand(1,18,8,8))
+            worker.forward(torch.rand(1, 18, 8, 8))
+
 
 if __name__ == "__main__":
     # test()
@@ -331,4 +351,3 @@ if __name__ == "__main__":
     # mp.set_start_method('spawn')
     # print(mp.get_start_method())
     ServerAI().run_server()
-

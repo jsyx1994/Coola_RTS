@@ -48,15 +48,22 @@ class ActorHead(nn.Module):
 
         x = input
         batch_size = x.size(0)
-        print(batch_size)
-        x = x.view((-1, map_size[0], map_size[1]))
-        # print(x.size())
+        x = x.view((batch_size, -1, map_size[0], map_size[1]))
+        loc = loc.view((batch_size,2))
 
-        channel_location = torch.zeros((1, map_size[0], map_size[1]))
+        channel_location = torch.zeros((batch_size, 1, map_size[0], map_size[1]))
         # torch.scatter()
-        channel_location[0][loc[0]][loc[1]] = 1
-        x = torch.cat((x, channel_location))
-        x = x.flatten().unsqueeze(0)
+        for b in range(batch_size):
+            x_, y_,  = loc[b]
+            # print(loc[b])
+            channel_location[b][0][x_][y_] = 1
+            # print(channel_location[b])
+        # channel_location[0][loc[0]][loc[1]] = 1
+        # print(channel_location.size())
+        # print(x.size())
+        x = torch.cat((x, channel_location), dim=1)
+        # print(x.size())
+        x = x.view(batch_size, -1)
 
         # print(x.size())
         x = F.relu(self.fc1(x))
