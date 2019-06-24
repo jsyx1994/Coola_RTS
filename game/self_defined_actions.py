@@ -155,6 +155,17 @@ class WorkerAction(Action):
         return json.dumps(action)
 
 
+class MeleeAction:
+    NO_OP = 0
+    UP = 1  # including moving and attacking behaviour
+    RIGHT = 2
+    DOWN = 3
+    LEFT = 4
+    pass
+
+class Ranged:
+    pass
+
 if __name__ == '__main__':
     pass
 

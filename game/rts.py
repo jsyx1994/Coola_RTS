@@ -10,6 +10,17 @@ RESOURCE = 4
 BASE = 5
 
 
+class Unit:
+    def __init__(self, unit):
+        self.type = unit['type']
+        self.id = unit['ID']
+        self.player = unit['player']
+        self.x = unit['x']
+        self.y = unit['y']
+        self.resources = unit['resources']
+        self.hitpoints = unit['hitpoints']
+
+
 class RtsUtils:
     def __init__(self):
 
@@ -23,6 +34,7 @@ class RtsUtils:
         self.game_map = None    # used to translate the actions
         self.state = None       # state without location
         self.first = True       # flag to form the player_actions
+        self._busy = None
 
     def reset(self, gs: dict, player: int):
         """
@@ -35,8 +47,30 @@ class RtsUtils:
         self.game_map = None  # used to translate the actions
         self.state = None  # state without location
         self.first = True
+        self._busy = self.get_self_busy()
         self.construct_game_map()
         # print('hp', self.get_reward_test())
+
+    def construct_game_map(self):
+        # construct the game_map
+        pgs = self.gs['pgs']
+        self.game_map = self._parse_terrain()
+        # print(self.game_map)
+        units = pgs['units']
+        for unit in units:
+            _player = unit['player']
+            y = unit['x']  # in array, row index first, but in the game the column first
+            x = unit['y']
+            if _player == -1:
+                self.game_map[x][y] = RESOURCE  # resources
+            elif self.player == _player:
+                self.game_map[x][y] = ALLY  # allies
+                if unit['type'] == 'Base':
+                    self.game_map[x][y] = BASE  # my Base
+            else:
+                self.game_map[x][y] = ENEMY  # enemies
+        # print(self.game_map)  # human readable game map
+        self.game_map = self.game_map.transpose((1, 0))  # transpose to correspond to later manipulating
 
     def get_last_reward(self):
         pgs = self.gs['pgs']
@@ -60,26 +94,13 @@ class RtsUtils:
         #     print(reward_self)
         return reward_self
 
-    def construct_game_map(self):
-        # construct the game_map
+    def get_self_units(self):
+        """
+        :return: list of our units
+        """
         pgs = self.gs['pgs']
-        self.game_map = self._parse_terrain()
-        # print(self.game_map)
-        units = pgs['units']
-        for unit in units:
-            _player = unit['player']
-            y = unit['x']  # in array, row index first, but in the game the column first
-            x = unit['y']
-            if _player == -1:
-                self.game_map[x][y] = RESOURCE  # resources
-            elif self.player == _player:
-                self.game_map[x][y] = ALLY  # allies
-                if unit['type'] == 'Base':
-                    self.game_map[x][y] = BASE  # my Base
-            else:
-                self.game_map[x][y] = ENEMY  # enemies
-        # print(self.game_map)  # human readable game map
-        self.game_map = self.game_map.transpose((1, 0))  # transpose to correspond to later manipulating
+        return [unit for unit in pgs['units'] if unit['player'] == self.player]
+
 
     def _parse_terrain(self) -> np.ndarray:
         """
@@ -100,41 +121,6 @@ class RtsUtils:
         return game_map
 
     def parse_game_state(self):
-        """
-            Parameters
-            ----------
-            ``current_player`` : int.
-                Denotes current player.
-            ``gs`` : dict, Game state data. json.loads()
-                {'time': int, 'pgs':{...}}
-            Returns
-            -------
-            ``spatial_features`` : A numpy arrary of shape(18,8,8)
-
-            Examples
-            --------
-            ``gs``:
-                {'time': 0,
-                 'pgs': {'width': 8,
-                         'height': 8,
-                         'terrain': '0000000000000000000000000000000000000000000000000000000000000000',
-                         'players': [{'ID': 0, 'resources': 5},
-                                     {'ID': 1, 'resources': 5}],
-                         'units':   [{'type': 'Resource', 'ID': 0, 'player': -1,
-                                      'x': 0, 'y': 0, 'resources': 20, 'hitpoints': 1
-                                     },
-                                     {'type': 'Resource',  'ID': 1,  'player': -1,
-                                      'x': 7,  'y': 7,  'resources': 20, 'hitpoints': 1
-                                     },
-                                     {'type': 'Base', 'ID': 2, 'player': 0,
-                                      'x': 2, 'y': 1, 'resources': 0, 'hitpoints': 10
-                                     },
-                                     {'type': 'Base', 'ID': 3, 'player': 1,
-                                      'x': 5, 'y': 6, 'resources': 0, 'hitpoints': 10
-                                     }]},
-                 'actions': []
-                }
-            """
         gs = self.gs
         current_player = self.player
 
@@ -208,19 +194,41 @@ class RtsUtils:
     def get_assignable(self):
         """
         get assignable units, busy units are excluded
-        :return:
+        :return: unit list
         """
-        units = []
-        gs = self.gs
-        pgs = gs['pgs']
-        actions = gs['actions']
-        _busy = [action['ID'] for action in actions if action['action']['type'] != 0]
-        # print('busy:', _busy)
-        for unit in pgs['units']:
-            # get all the units of current player
-            if (unit['player'] == self.player) and (unit['ID'] not in _busy):
-                units.append(unit)
-        return units
+        # units = []
+        pgs = self.gs['pgs']
+        # # print('busy:', _busy)
+        # for unit in pgs['units']:
+        #     # get all the units of current player
+        #     if (unit['player'] == self.player) and (unit['ID'] not in self._busy):
+        #         units.append(unit)
+        return [unit for unit in pgs['units'] if (unit['player'] == self.player) and (unit['ID'] not in self._busy)]
+
+    def is_assignable(self, unit):
+        return (unit['player'] == self.player) and (unit['ID'] not in self._busy)
+
+    def get_actions(self):
+        actions = self.gs['actions']
+        return [action for action in actions]
+
+    def get_action_type(self, action):
+        return action['action']['type']
+
+
+    def get_self_busy(self):
+        """
+        :return: busy ID list
+        """
+        self_units = self.get_self_units()
+        self_units_id = [unit['ID'] for unit in self_units]
+        actions = self.gs['actions']
+        # units = self.gs['pgs']['units']
+        _busy = [action['ID'] for action in actions if (action['action']['type'] != 0) and (action['ID'] in self_units_id)]
+
+        # _busy_units = [unit for unit in units if unit['ID'] in _busy]
+        # _busy_actions = [action for action in actions if action['ID'] in _busy]
+        return _busy
 
     def _add_player_action(self, json_action: str):
         if self.first:
@@ -263,3 +271,5 @@ if __name__ == '__main__':
     # print(gs)
     # gs = json.loads(gs)
     rts_utils = RtsUtils()
+    rts_utils.reset(gs, 0)
+    print(rts_utils.get_self_units())

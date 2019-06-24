@@ -39,11 +39,21 @@ class ActorHead(nn.Module):
         # self.logits = nn.Linear(256, self.action_dim)
 
     def forward(self, input, loc):
+        """
+        :param input: global state
+        :param loc: unit location
+        :return: policy
+        """
+        # assert input.size(0) == loc.size(0)
+
         x = input
+        batch_size = x.size(0)
+        print(batch_size)
         x = x.view((-1, map_size[0], map_size[1]))
         # print(x.size())
 
         channel_location = torch.zeros((1, map_size[0], map_size[1]))
+        # torch.scatter()
         channel_location[0][loc[0]][loc[1]] = 1
         x = torch.cat((x, channel_location))
         x = x.flatten().unsqueeze(0)
@@ -59,6 +69,7 @@ class ActorHead(nn.Module):
         print(self.model_name + '_head.pt saved')
 
 
+# def test():
 
 
 

@@ -247,7 +247,11 @@ def test4():
     net.state_dict()['v_out.fc1.weight'][0][0] *= -1
     pass
 
+def test5():
+    loc = torch.randn(20, 2)
+    net = ActorCritic(actor='Worker')
+    net.forward(torch.randn(20,18,8,8), info=loc)
 
 if __name__ == '__main__':
-    test4()
+    test5()
     pass

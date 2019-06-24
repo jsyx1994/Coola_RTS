@@ -17,7 +17,7 @@ from collections import namedtuple
 
 
 Transition = namedtuple('Transition',
-                        ('state', 'action', 'next_state', 'reward'))
+                        ('state', 'action', 'next_state', 'reward', 'location'))
 
 rts_utils = RtsUtils()
 # worker = ActorCritic(actor='Worker')    # output  critic or worker policy
@@ -59,7 +59,7 @@ class SocketWrapperAI:
 
         self.worker_memory = []
         self.p_state = None
-        self.p_worker_action = []
+        self.p_worker_info = {}   # a dict store all worker's actions {id->(action,location)}
 
     def step(self, action):
         pass
@@ -83,6 +83,7 @@ class SocketWrapperAI:
         worker = ActorCritic(actor='Worker')
 
         self.worker_memory = []
+        self.p_worker_info = {}   # a dict store all worker's actions {id->(action,location)}
         self.p_state = None
 
     def run_episodes(self):
@@ -96,7 +97,6 @@ class SocketWrapperAI:
             while 1:
                 # retrieve the message from socket
                 msg = str(client_socket.recv(10240).decode())
-                # print(msg)
                 # print(msg)
                 # connection broken, retry.
                 if msg == 0:
@@ -156,6 +156,10 @@ class SocketWrapperAI:
                     gs = json.loads(gs)
                     rts_utils.reset(gs, player)
                     assignable = rts_utils.get_assignable()
+                    # busy = rts_utils.get_self_busy()    # id
+                    # units = rts_utils.get_self_units()  # unit
+                    # print(busy)
+
                     state = torch.from_numpy(rts_utils.parse_game_state()).unsqueeze(0).float()   # s(t)
                     p_r = rts_utils.get_last_reward()
                     if p_r > 0:
@@ -167,22 +171,25 @@ class SocketWrapperAI:
                     #     pass
                     # print(Transition(0, 0, 0, p_r))
                     # print(len(self.p_worker_action))
-                    for p_worker_action in self.p_worker_action:
-                        # a = p_r
-                        self.worker_memory.append(Transition(self.p_state, p_worker_action, state, p_r))
+                    for i in self.p_worker_info.values():
+                        self.worker_memory.append(Transition(self.p_state, i[0], state, p_r, i[1]))
+                        if p_r == 4:
+                            print(self.worker_memory[-1])
 
-                    self.p_worker_action=[]
                     # print(self.p_state)
 
-                    if gs['time'] % 10 == 0:
-                        for unit in assignable:
-                            location = int(unit['x']), int(unit['y'])
-                            if unit['type'] == 'Worker':
-                                # print(worker.forward(state, loc=location))
-                                action = self.select_action(worker, state, info=location)
-                                rts_utils.translate_action(uid=unit['ID'], location=location,
-                                                           bot_type='Worker', act_code=action)
-                                self.p_worker_action.append(action)
+                    # if gs['time'] % 1 == 0:
+                    for unit in assignable:
+                        location = int(unit['x']), int(unit['y'])
+                        if unit['type'] == 'Worker':
+                            # print(worker.forward(state, loc=location))
+                            # if rts_utils.is_assignable(unit):
+                            action = self.select_action(worker, state, info=location)
+                            rts_utils.translate_action(uid=unit['ID'], location=location,
+                                                       bot_type='Worker', act_code=action)
+                            # print(type(unit['ID']))
+                            self.p_worker_info[str(unit['ID'])] = (action, location)
+
                     self.p_state = state    # assign to previous states
 
                     pa = rts_utils.get_player_action()
@@ -215,7 +222,7 @@ class SocketWrapperAI:
 
                     # add last
 
-                    self.optimize()
+                    # self.optimize()
                     # self.client_socket.close()
 
     @staticmethod
@@ -227,7 +234,15 @@ class SocketWrapperAI:
         # worker = ActorCritic(actor='Worker')
         global worker
         # print(self.worker_memory)
-        # batch = Transition(*zip(*self.worker_memory))
+        batch = Transition(*zip(*self.worker_memory))
+        print(torch.Tensor(batch.location).size())
+        state_batch = batch.state
+        next_state_batch = batch.next_state
+        action_batch = batch.action
+        reward_batch = batch.reward
+        worker.forward(input=state_batch)
+        log_pi_sa = torch.log(state_batch)[action_batch]
+        print(batch)
         # print(batch)
         # print(self.log_pi_sa)
         # optimizer = optim.Adam(params=worker.parameters(), lr=1e-3)
@@ -286,11 +301,19 @@ def test():
     #     worker.forward(torch.rand(1, 18, 8, 8))
         # testmodel.forward(torch.rand(1, 18, 8, 8))
     # time.sleep(10)
-    for i in range(10000000):
-        with torch.no_grad():
-            testmodel.forward(torch.rand(1, 18, 8, 8)).detach()
+    x = torch.randn((1, 18, 8, 8))
+    import gc
+    while 1:
+        # testmodel = TestLeakModel()
+        print('loop one')
+        gc.collect()
+        for i in range(10000):
+            with torch.no_grad():
+                forward(testmodel,x)
     # worker = ActorCritic(actor='Worker')
 
+def forward(model,x):
+    return np.asarray(model.forward(x))
 
 def test1():
     while(1):
@@ -299,7 +322,7 @@ def test1():
             worker.forward(torch.rand(1,18,8,8))
 
 if __name__ == "__main__":
-    # test()v
+    # test()
     # test1()
     # import time
     #
