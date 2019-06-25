@@ -62,6 +62,7 @@ class SocketWrapperAI:
         self.p_state = None
         self.p_worker_info = {}  # a dict store all worker's actions {id->(action,location)}
         self.G0 = 0
+        self.G0s = []
 
     def step(self, action):
         pass
@@ -73,8 +74,10 @@ class SocketWrapperAI:
             import objgraph
             objgraph.show_growth()
 
-        global worker
+        global worker, rts_utils
         worker = ActorCritic(actor='Worker')
+        rts_utils.last_hp_self = 0
+        rts_utils.last_hp_oppo = 0
 
         self.worker_memory = []
         self.p_worker_info = {}  # a dict store all worker's actions {id->(action,location)}
@@ -220,7 +223,7 @@ class SocketWrapperAI:
                     # add last
                     p_r = rts_utils.get_last_reward()
                     self.G0 += p_r
-
+                    self.G0s.append(self.G0)
                     self.plot_durations()
                     for i in self.p_worker_info.values():
                         self.worker_memory.append(Transition(self.p_state, i[0], state, p_r, i[1]))
@@ -254,16 +257,18 @@ class SocketWrapperAI:
         # pi = worker.forward(input=state_batch, info=location_batch)
         # pi_sa = worker.forward(input=state_batch, info=location_batch).gather(1, action_batch.unsqueeze(1)).squeeze()
         # print('pi(a|s)', pi_sa)
+        policy = worker(input=state_batch, info=location_batch)
         log_pi_sa = torch.log(
-            worker.forward(input=state_batch, info=location_batch).gather(1, action_batch.unsqueeze(1)).squeeze())
+            policy.gather(1, action_batch.unsqueeze(1)).squeeze())
         print('log_pi_sa', log_pi_sa.size())
         targets = reward_batch.unsqueeze(1) + self.GAMMA * v_t_1
         print('targets', targets.size())
         predicts = v_t
         td_error = targets - predicts
+        entropy = -torch.sum(policy[0] * torch.log(policy[0]))
 
         pg_loss = log_pi_sa * td_error
-        ac_loss = -pg_loss.mean() +  F.mse_loss(targets, predicts)
+        ac_loss = -pg_loss.mean() + F.mse_loss(targets, predicts) - entropy
         print(ac_loss.size())
 
         print('loss', pg_loss.mean().size(), F.mse_loss(targets, predicts).size())
@@ -280,20 +285,16 @@ class SocketWrapperAI:
 
 
     def plot_durations(self):
-        print(self.G_0s)
+        print(self.G0)
         plt.figure(1)
         plt.clf()
-        durations_t = torch.tensor(self.G_0s, dtype=torch.float)
+        durations_t = torch.tensor(self.G0s, dtype=torch.float)
         plt.title('Training...')
         plt.xlabel('Episode')
         # plt.ylabel('Duration')
         plt.ylabel('Returns')
         plt.plot(durations_t.numpy())
         # Take 100 episode averages and plot them too
-        if len(durations_t) >= 100:
-            means = durations_t.unfold(0, 100, 1).mean(1).view(-1)
-            means = torch.cat((torch.zeros(99), means))
-            plt.plot(means.numpy())
 
         plt.pause(0.001)  # pause a bit so that plots are updated
 
