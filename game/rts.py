@@ -36,7 +36,11 @@ class RtsUtils:
         self.first = True       # flag to form the player_actions
         self._busy = None
 
-    def reset(self, gs: dict, player: int):
+    def reset_reward(self):
+        self.last_hp_oppo = 0
+        self.last_hp_self = 0
+
+    def reset_game_state(self, gs: dict, player: int):
         """
         :param gs: game state dict from java end
         :param player: current player
@@ -50,6 +54,19 @@ class RtsUtils:
         self._busy = self.get_self_busy()
         self.construct_game_map()
         # print('hp', self.get_reward_test())
+
+    def get_player(self):
+        return self.player
+
+    @property
+    def is_game_over(self):
+        return self.gs['gameOver']
+
+    def get_winner(self):
+        return self.gs['winner']
+
+    def get_rl_bundle(self):
+        return self.parse_game_state(), self.get_last_reward(), self.is_game_over
 
     def construct_game_map(self):
         # construct the game_map

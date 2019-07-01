@@ -80,7 +80,7 @@ class Shared(nn.Module):
         """
         # pass
         torch.save(self.state_dict(), model_saved_dir + '/shared.pt')
-        print('shared saved')
+        # print('shared saved')
 
 
 class ActorCritic(nn.Module):

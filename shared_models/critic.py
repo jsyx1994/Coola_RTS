@@ -20,7 +20,7 @@ class CriticHead(nn.Module):
     def __del__(self):
         # pass
         torch.save(self.state_dict(), model_saved_dir + '/critic_head.pt')
-        print('critic head saved')
+        # print('critic head saved')
 
     def forward(self, input):
         x = input
