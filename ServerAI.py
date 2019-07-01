@@ -139,8 +139,6 @@ class SocketWrapperAI:
                 gs = json.loads(gs)
                 player = int(msg.split()[1])
                 self.state, _, _, = env.reset(gs, player)
-
-
             else:
                 while (not done):
                     state = self.state
@@ -193,15 +191,15 @@ class SocketWrapperAI:
         # print('targets', targets.size())
         predicts = v_t
         td_error = targets - predicts
-        entropy = -torch.sum(policy[0] * torch.log(policy[0]))
+        # entropy = -torch.sum(policy[0] * torch.log(policy[0]))
 
         pg_loss = log_pi_sa * td_error
-        ac_loss = -pg_loss.mean() + F.mse_loss(targets, predicts) - entropy
+        ac_loss = -pg_loss.mean() + F.mse_loss(targets, predicts)   # - entropy
         # print(ac_loss.size())
 
         # print('loss', pg_loss.mean().size(), F.mse_loss(targets, predicts).size())
         optimizer.zero_grad()
-        ac_loss.backward(retain_graph=True)
+        ac_loss.backward()
         optimizer.step()
 
         # print(state_batch.size())
@@ -221,7 +219,12 @@ class SocketWrapperAI:
         plt.ylabel('Returns')
         plt.plot(durations_t.numpy())
         # Take 100 episode averages and plot them too
+        if len(durations_t) >= 100:
+            means = durations_t.unfold(0, 100, 1).mean(1).view(-1)
+            means = torch.cat((torch.zeros(99), means))
+            plt.plot(means.numpy())
 
+        plt.pause(0.001)  # pause a bit so that plots are updated
         plt.pause(0.001)  # pause a bit so that plots are updated
 
 
