@@ -24,7 +24,7 @@ class Unit:
 class RtsUtils:
     def __init__(self):
 
-        np.set_printoptions(threshold=np.inf)
+        # np.set_printoptions(threshold=np.inf)
         self.player_actions = ''
         self.last_hp_self = 0    # last step's sum of hps of self
         self.last_hp_oppo = 0    # last step's sum of hps of opponent

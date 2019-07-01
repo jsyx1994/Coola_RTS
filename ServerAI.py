@@ -22,14 +22,9 @@ Transition = namedtuple('Transition',
 env = Environment()
 global state
 # rts_utils = RtsUtils()
-worker = ActorCritic(actor='Worker')    # output  critic or worker policy
+worker = ActorCritic(actor='Worker')  # output  critic or worker policy
 testmodel = TestLeakModel()
 
-def step():
-    pass
-
-def reset():
-    pass
 
 class ServerAI:
     def __init__(self, host='127.0.0.1', port=9898):
@@ -77,18 +72,25 @@ class SocketWrapperAI:
             gc.collect()
             import objgraph
             objgraph.show_growth()
-
-        global worker, rts_utils
+        global worker
         worker = ActorCritic(actor='Worker')
-        rts_utils.reset_reward()
 
         self.worker_memory = []
         self.p_worker_info = {}  # a dict store all worker's actions {id->(action,location)}
         self.state = None
         self.G0 = 0
 
+    @staticmethod
+    def select_action(unit_nn, state, info):
+        with torch.no_grad():
+            print(unit_nn(state))
+            return int(Categorical(unit_nn(state, info)).sample()[0])  # a(t)
+
     def sample(self, state):
+        state = torch.from_numpy(state).unsqueeze(0).float()
         assignable = env.rts_utils.get_assignable()
+        actions = {'worker': []}
+        locations = {'worker': []}
         for unit in assignable:
             location = int(unit['x']), int(unit['y'])
             if unit['type'] == 'Worker':
@@ -96,12 +98,19 @@ class SocketWrapperAI:
                 # if rts_utils.is_assignable(unit):
                 loc = torch.LongTensor(location)
                 action = self.select_action(worker, state, info=loc)
-
                 env.rts_utils.translate_action(uid=unit['ID'], location=location,
-                                           bot_type='Worker', act_code=action)
-                # print(type(unit['ID']))
-                self.p_worker_info[str(unit['ID'])] = (action, loc)
-        return env.rts_utils.get_player_action()
+                                               bot_type='Worker', act_code=action)
+                actions['worker'].append(action)
+                locations['worker'].append(loc)
+                # # print(type(unit['ID']))
+                # self.p_worker_info[str(unit['ID'])] = (action, loc)
+        return env.rts_utils.get_player_action(), actions, locations
+
+    @staticmethod
+    def record(memory: list, state, actions, locations, next_state, reward):
+        for action, location in zip(actions, locations):
+            memory.append(
+                Transition(state, action, next_state, reward, location))
 
     def run_episodes(self):
         """
@@ -117,6 +126,7 @@ class SocketWrapperAI:
         first_step = True
         while 1:
             if first_step:
+                self.init_new_episode()
                 first_step = False
                 done = False
                 episodes += 1
@@ -130,129 +140,52 @@ class SocketWrapperAI:
                 player = int(msg.split()[1])
                 self.state, _, _, = env.reset(gs, player)
 
+
             else:
-                while(not done):
-                    state = torch.from_numpy(self.state).unsqueeze(0).float()
-                    pa = self.sample(state)
+                while (not done):
+                    state = self.state
+                    pa, actions, locations = self.sample(state)
                     next_state, reward, done = env.step(client_socket, pa, player)
                     self.state = next_state
+                    self.G0 += reward
+                    self.record(memory=self.worker_memory, state=state, actions=actions['worker'],
+                                next_state=next_state, reward=reward, locations=locations['worker'])
 
+                self.G0s.append(self.G0)
+                self.plot_durations()
+                self.optimize(actor=worker, batch_bundle=self.worker_memory)
                 first_step = True
-
-
-
-            #
-            # elif msg.startswith('step'):
-            #
-            #     # get player ID
-            #     player = int(msg.split()[1])  ### issue
-            #     # get game state
-            #     gs = msg.split('\n')[1]
-            #     # json.loads() returns dict
-            #     gs = json.loads(gs)
-            #     rts_utils.reset(gs, player)
-            #     assignable = rts_utils.get_assignable()
-            #     # busy = rts_utils.get_self_busy()    # id
-            #     # units = rts_utils.get_self_units()  # unit
-            #     # print(busy)
-            #
-            #     state = torch.from_numpy(rts_utils.parse_game_state()).unsqueeze(0).float()  # s(t)
-            #     p_r = rts_utils.get_last_reward()
-            #     self.G0 += p_r
-            #     if p_r > 0:
-            #         x = 2
-            #         pass
-            #     # print(p_r)
-            #     # for i in range(len(self.p_worker_action)):
-            #     #     a = p_r
-            #     #     pass
-            #     # print(Transition(0, 0, 0, p_r))
-            #     # print(len(self.p_worker_action))
-            #     for i in self.p_worker_info.values():
-            #         self.worker_memory.append(Transition(self.p_state, i[0], state, p_r, i[1]))
-            #         # if p_r == 4:
-            #         #     print(self.worker_memory[-1])
-            #
-            #     # print(self.p_state)
-            #
-            #     # if gs['time'] % 1 == 0:
-            #     for unit in assignable:
-            #         location = int(unit['x']), int(unit['y'])
-            #         if unit['type'] == 'Worker':
-            #             # print(worker.forward(state, loc=location))
-            #             # if rts_utils.is_assignable(unit):
-            #             loc = torch.LongTensor(location)
-            #             action = self.select_action(worker, state, info=loc)
-            #
-            #             rts_utils.translate_action(uid=unit['ID'], location=location,
-            #                                        bot_type='Worker', act_code=action)
-            #             # print(type(unit['ID']))
-            #             self.p_worker_info[str(unit['ID'])] = (action, loc)
-            #
-            #     self.p_state = state  # assign to previous states
-            #
-            #     pa = rts_utils.get_player_action()
-            #     if self.DEBUG >= 2:
-            #         print('getAction for player {}'.format(player))
-            #         print('with game state %s' % gs)
-            #
-            #     client_socket.sendall(('%s\n' % pa).encode())
-            #
-            #     if self.DEBUG >= 1:
-            #         print('action sent!')
-            #
-            # elif msg.startswith('gameOver'):
-            #     first_step = True
-            #     msg = msg.split()
-            #     winner = msg[1]
-            #     if self.DEBUG >= 1:
-            #         print('gameOver, winner is %s' % winner)
-            #     # self.ai.game_over(winner)
-            #
-            #     client_socket.sendall(('ack\n').encode())
-            #     # tmp.set_start_method('fork')
-            #     # tmp.Process(target=self.optimize, args=()).start()
-            #
-            #     # add last
-            #     p_r = rts_utils.get_last_reward()
-            #     self.G0 += p_r
-            #     self.G0s.append(self.G0)
-            #     self.plot_durations()
-            #     for i in self.p_worker_info.values():
-            #         self.worker_memory.append(Transition(self.p_state, i[0], state, p_r, i[1]))
-            #     self.optimize()
-            #     # self.client_socket.close()
         client_socket.close()
 
-    @staticmethod
-    def select_action(unit_nn, state, info):
-        with torch.no_grad():
-            print(unit_nn(state))
-            return int(Categorical(unit_nn(state, info)).sample()[0])  # a(t)
+    def optimize(self, actor, batch_bundle):
+        batch_bundle = [ts for ts in batch_bundle if ts.action]
+        batch = Transition(*zip(*batch_bundle))
 
-    def optimize(self):
-        # worker = ActorCritic(actor='Worker')
-        global worker
-        # print(self.worker_memory)
-        # print(worker)
-        optimizer = optim.Adam(params=worker.parameters(), lr=1e-3)
-        batch = Transition(*zip(*self.worker_memory))
-        state_batch = torch.cat(batch.state)
-        next_state_batch = torch.cat(batch.next_state)
+        # return
+        print('s', len(batch.state))
+        print('s\'', len(batch.next_state))
+        print('act', len(batch.action))
+        print('reward', len(batch.reward))
+        print('loc', len(batch.location))
+        optimizer = optim.Adam(params=actor.parameters(), lr=1e-3)
+
+        state_batch = torch.Tensor(batch.state)
+        next_state_batch = torch.Tensor(batch.next_state)
         action_batch = torch.LongTensor(batch.action)
         reward_batch = torch.Tensor(batch.reward)
         # print(batch.location)
         location_batch = torch.cat(batch.location)
+
         # print(location_batch)
-        v_t = worker.forward(input=state_batch, info='critic')
+        v_t = actor(input=state_batch, info='critic')
         # print('v_t',v_t.size())
-        v_t_1 = worker.forward(input=next_state_batch, info='critic')
+        v_t_1 = actor(input=next_state_batch, info='critic')
         # print('v_t_1',v_t_1.size())
 
         # pi = worker.forward(input=state_batch, info=location_batch)
         # pi_sa = worker.forward(input=state_batch, info=location_batch).gather(1, action_batch.unsqueeze(1)).squeeze()
         # print('pi(a|s)', pi_sa)
-        policy = worker(input=state_batch, info=location_batch)
+        policy = actor(input=state_batch, info=location_batch)
         log_pi_sa = torch.log(
             policy.gather(1, action_batch.unsqueeze(1)).squeeze())
         # print('log_pi_sa', log_pi_sa.size())
@@ -271,13 +204,11 @@ class SocketWrapperAI:
         ac_loss.backward(retain_graph=True)
         optimizer.step()
 
-
         # print(state_batch.size())
         # print(state_batch.size())
         # print(next_state_batch.size())
         # print(action_batch.size())
         # print(reward_batch.size())
-
 
     def plot_durations(self):
         # print(self.G0)
@@ -293,27 +224,8 @@ class SocketWrapperAI:
 
         plt.pause(0.001)  # pause a bit so that plots are updated
 
-        # Data for plotting
-        # t = np.arange(0.0, 2.0, 0.01)
-        # s = 1 + np.sin(2 * np.pi * t)
-        #
-        # fig, ax = plt.subplots()
-        # ax.plot(t, s)
-        #
-        # ax.set(xlabel='time (s)', ylabel='voltage (mV)',
-        #        title='About as simple as it gets, folks')
-        # ax.grid()
-        #
-        # fig.savefig("test.png")
-        # plt.show()
-
 
 def test():
-    # for i in range(1000):
-    #     worker = ActorCritic(actor='Worker')
-    #     worker.forward(torch.rand(1, 18, 8, 8))
-    # testmodel.forward(torch.rand(1, 18, 8, 8))
-    # time.sleep(10)
     x = torch.randn((1, 18, 8, 8))
     # import gc
     while 1:
