@@ -47,7 +47,7 @@ class ServerAI:
 
 
 class SocketWrapperAI:
-    DEBUG = 1
+    DEBUG = 0
     GAMMA = 0.99
 
     def __init__(self, client_socket: socket.socket, client_number, ai=None):
@@ -83,7 +83,7 @@ class SocketWrapperAI:
     @staticmethod
     def select_action(unit_nn, state, info):
         with torch.no_grad():
-            print(unit_nn(state))
+            # print(unit_nn(state,info))
             return int(Categorical(unit_nn(state, info)).sample()[0])  # a(t)
 
     def sample(self, state):
@@ -157,15 +157,17 @@ class SocketWrapperAI:
 
     def optimize(self, actor, batch_bundle):
         batch_bundle = [ts for ts in batch_bundle if ts.action]
+        if len(batch_bundle)==0:
+            return
         batch = Transition(*zip(*batch_bundle))
 
         # return
-        print('s', len(batch.state))
-        print('s\'', len(batch.next_state))
-        print('act', len(batch.action))
-        print('reward', len(batch.reward))
-        print('loc', len(batch.location))
-        optimizer = optim.Adam(params=actor.parameters(), lr=1e-3)
+        # print('s', len(batch.state))
+        # print('s\'', len(batch.next_state))
+        # print('act', len(batch.action))
+        # print('reward', len(batch.reward))
+        # print('loc', len(batch.location))
+        optimizer = optim.Adam(params=actor.parameters(), lr=1e-4)
 
         state_batch = torch.Tensor(batch.state)
         next_state_batch = torch.Tensor(batch.next_state)
@@ -224,7 +226,6 @@ class SocketWrapperAI:
             means = torch.cat((torch.zeros(99), means))
             plt.plot(means.numpy())
 
-        plt.pause(0.001)  # pause a bit so that plots are updated
         plt.pause(0.001)  # pause a bit so that plots are updated
 
 
