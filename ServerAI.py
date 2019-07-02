@@ -61,8 +61,7 @@ class SocketWrapperAI:
             print("New connection with client# {} at {}".format(client_number, client_socket))
 
         self.worker_memory = []
-        self.p_state = None
-        self.p_worker_info = {}  # a dict store all worker's actions {id->(action,location)}
+        self.state = None
         self.G0 = 0
         self.G0s = []
 
@@ -76,7 +75,6 @@ class SocketWrapperAI:
         worker = ActorCritic(actor='Worker')
 
         self.worker_memory = []
-        self.p_worker_info = {}  # a dict store all worker's actions {id->(action,location)}
         self.state = None
         self.G0 = 0
 
@@ -87,6 +85,13 @@ class SocketWrapperAI:
             return int(Categorical(unit_nn(state, info)).sample()[0])  # a(t)
 
     def sample(self, state):
+        """
+        :param state:
+        :return:
+        player actions: string of all kinds' actions
+        actions: all kinds' actions selected;
+        locations: additional information for a actor to make actions
+        """
         state = torch.from_numpy(state).unsqueeze(0).float()
         assignable = env.rts_utils.get_assignable()
         actions = {'worker': []}
@@ -143,7 +148,7 @@ class SocketWrapperAI:
                 while (not done):
                     state = self.state
                     pa, actions, locations = self.sample(state)
-                    next_state, reward, done = env.step(client_socket, pa, player)
+                    next_state, reward, done = env.step(client_socket, pa, env.rts_utils.get_player())
                     self.state = next_state
                     self.G0 += reward
                     self.record(memory=self.worker_memory, state=state, actions=actions['worker'],
@@ -225,8 +230,6 @@ class SocketWrapperAI:
             plt.plot(means.numpy())
 
         plt.pause(0.001)  # pause a bit so that plots are updated
-        plt.pause(0.001)  # pause a bit so that plots are updated
-
 
 def test():
     x = torch.randn((1, 18, 8, 8))
