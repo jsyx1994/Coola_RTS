@@ -47,7 +47,7 @@ class ServerAI:
 
 
 class SocketWrapperAI:
-    DEBUG = 1
+    DEBUG = 0
     GAMMA = 0.99
 
     def __init__(self, client_socket: socket.socket, client_number, ai=None):
@@ -61,7 +61,8 @@ class SocketWrapperAI:
             print("New connection with client# {} at {}".format(client_number, client_socket))
 
         self.worker_memory = []
-        self.state = None
+        self.p_state = None
+        self.p_worker_info = {}  # a dict store all worker's actions {id->(action,location)}
         self.G0 = 0
         self.G0s = []
 
@@ -75,23 +76,17 @@ class SocketWrapperAI:
         worker = ActorCritic(actor='Worker')
 
         self.worker_memory = []
+        self.p_worker_info = {}  # a dict store all worker's actions {id->(action,location)}
         self.state = None
         self.G0 = 0
 
     @staticmethod
     def select_action(unit_nn, state, info):
         with torch.no_grad():
-            print(unit_nn(state))
+            # print(unit_nn(state,info))
             return int(Categorical(unit_nn(state, info)).sample()[0])  # a(t)
 
     def sample(self, state):
-        """
-        :param state:
-        :return:
-        player actions: string of all kinds' actions
-        actions: all kinds' actions selected;
-        locations: additional information for a actor to make actions
-        """
         state = torch.from_numpy(state).unsqueeze(0).float()
         assignable = env.rts_utils.get_assignable()
         actions = {'worker': []}
@@ -148,7 +143,7 @@ class SocketWrapperAI:
                 while (not done):
                     state = self.state
                     pa, actions, locations = self.sample(state)
-                    next_state, reward, done = env.step(client_socket, pa, env.rts_utils.get_player())
+                    next_state, reward, done = env.step(client_socket, pa, player)
                     self.state = next_state
                     self.G0 += reward
                     self.record(memory=self.worker_memory, state=state, actions=actions['worker'],
@@ -162,15 +157,17 @@ class SocketWrapperAI:
 
     def optimize(self, actor, batch_bundle):
         batch_bundle = [ts for ts in batch_bundle if ts.action]
+        if len(batch_bundle)==0:
+            return
         batch = Transition(*zip(*batch_bundle))
 
         # return
-        print('s', len(batch.state))
-        print('s\'', len(batch.next_state))
-        print('act', len(batch.action))
-        print('reward', len(batch.reward))
-        print('loc', len(batch.location))
-        optimizer = optim.Adam(params=actor.parameters(), lr=1e-3)
+        # print('s', len(batch.state))
+        # print('s\'', len(batch.next_state))
+        # print('act', len(batch.action))
+        # print('reward', len(batch.reward))
+        # print('loc', len(batch.location))
+        optimizer = optim.Adam(params=actor.parameters(), lr=1e-4)
 
         state_batch = torch.Tensor(batch.state)
         next_state_batch = torch.Tensor(batch.next_state)
@@ -230,6 +227,7 @@ class SocketWrapperAI:
             plt.plot(means.numpy())
 
         plt.pause(0.001)  # pause a bit so that plots are updated
+
 
 def test():
     x = torch.randn((1, 18, 8, 8))

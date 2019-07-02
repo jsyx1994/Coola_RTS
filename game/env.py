@@ -15,7 +15,7 @@ class Environment:
 
     def step(self, sock: socket.socket, pa: str, player):
         sock.sendall(('%s\n' % pa).encode())
-        print('action sent!')
+        # print('action sent!')
         msg = str(sock.recv(10240).decode())
         if msg == 0:
             print('break')
