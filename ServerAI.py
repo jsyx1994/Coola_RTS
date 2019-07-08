@@ -138,8 +138,8 @@ class SocketWrapperAI:
                     next_state, reward, done = env.step(client_socket, pa, env.rts_utils.get_player())
                     self.state = next_state
                     for act, _ in act_loc['Worker']:
-                        if act != WorkerAction.NO_OP:
-                            self.G0 += 1
+                        if act == WorkerAction.DOWN:
+                            reward += 1
                     self.G0 += reward
                     self.record(memory=self.worker_memory, state=state, act_loc=act_loc['Worker'],
                                 next_state=next_state, reward=reward)

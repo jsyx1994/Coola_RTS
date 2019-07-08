@@ -66,7 +66,7 @@ class RtsUtils:
         return self.gs['winner']
 
     def get_rl_bundle(self):
-        return self.parse_game_state(), self.get_last_reward(), self.is_game_over
+        return self.parse_game_state(), self.get_reward(), self.is_game_over
 
     def construct_game_map(self):
         # construct the game_map
@@ -89,7 +89,7 @@ class RtsUtils:
         # print(self.game_map)  # human readable game map
         self.game_map = self.game_map.transpose((1, 0))  # transpose to correspond to later manipulating
 
-    def get_last_reward(self):
+    def get_reward(self):
         pgs = self.gs['pgs']
         units = pgs['units']
         hp_self = 0
