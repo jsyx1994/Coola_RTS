@@ -47,7 +47,7 @@ class ServerAI:
 
 class SocketWrapperAI:
     DEBUG = 0
-    GAMMA = 0.99
+    GAMMA = 1
 
     def __init__(self, client_socket: socket.socket, client_number):
         self.client_socket = client_socket
@@ -79,7 +79,7 @@ class SocketWrapperAI:
     @staticmethod
     def select_action(unit_nn, state, info):
         with torch.no_grad():
-            # print(unit_nn(state,info))
+            print(unit_nn(state,info))
             return int(Categorical(unit_nn(state, info)).sample()[0])  # a(t)
 
     def sample(self, state):
@@ -135,11 +135,12 @@ class SocketWrapperAI:
                 while (not done):
                     state = self.state
                     pa, act_loc = self.sample(state)
+                    # print(act_loc)
                     next_state, reward, done = env.step(client_socket, pa, env.rts_utils.get_player())
                     self.state = next_state
-                    for act, _ in act_loc['Worker']:
-                        if act == WorkerAction.DOWN:
-                            reward += 1
+                    # for act, _ in act_loc['Worker']:
+                    #     if act == WorkerAction.DOWN:
+                    #         reward += 1
                     self.G0 += reward
                     self.record(memory=self.worker_memory, state=state, act_loc=act_loc['Worker'],
                                 next_state=next_state, reward=reward)
@@ -151,7 +152,7 @@ class SocketWrapperAI:
         client_socket.close()
 
     def optimize(self, actor, batch_bundle):
-        batch_bundle = [ts for ts in batch_bundle if ts.action]
+        # batch_bundle = [ts for ts in batch_bundle if ts.action]
         if len(batch_bundle) == 0:
             print('skip training')
             return
@@ -163,7 +164,7 @@ class SocketWrapperAI:
         # print('act', len(batch.action))
         # print('reward', len(batch.reward))
         # print('loc', len(batch.location))
-        optimizer = optim.Adam(params=actor.parameters(), lr=1e-3)
+        optimizer = optim.Adam(params=actor.parameters(), lr=1e-2)
 
         state_batch = torch.Tensor(batch.state)
         next_state_batch = torch.Tensor(batch.next_state)
@@ -182,8 +183,10 @@ class SocketWrapperAI:
         # pi_sa = worker.forward(input=state_batch, info=location_batch).gather(1, action_batch.unsqueeze(1)).squeeze()
         # print('pi(a|s)', pi_sa)
         policy = actor(input=state_batch, info=location_batch)
-        log_pi_sa = torch.log(
-            policy.gather(1, action_batch.unsqueeze(1)).squeeze())
+        entropy = -torch.sum(policy[0] * torch.log(policy[0]))
+        print(entropy)
+
+        log_pi_sa = torch.log(policy.gather(1, action_batch.unsqueeze(1)).squeeze())
         # print('log_pi_sa', log_pi_sa.size())
         targets = reward_batch.unsqueeze(1) + self.GAMMA * v_t_1
         # print('targets', targets.size())
@@ -192,7 +195,12 @@ class SocketWrapperAI:
         # entropy = -torch.sum(policy[0] * torch.log(policy[0]))
 
         pg_loss = log_pi_sa * td_error
-        ac_loss = -pg_loss.mean() + F.mse_loss(targets, predicts)   # - entropy
+        ac_loss = -pg_loss.mean() + F.mse_loss(targets, predicts) - entropy
+
+        print("policy_loss:", pg_loss.mean())
+        print("ac_loss:", -pg_loss.mean() + F.mse_loss(targets, predicts))
+        print("entropy:", entropy)
+        print('ac_loss plus entropy:', ac_loss)
         # print(ac_loss.size())
 
         # print('loss', pg_loss.mean().size(), F.mse_loss(targets, predicts).size())

@@ -45,6 +45,9 @@ class Shared(nn.Module):
 
         self.conv1 = nn.Conv2d(in_channels=input_channel, out_channels=16, kernel_size=3, padding=1)   # WEIGHTs ARE INITED
         self.conv2 = nn.Conv2d(in_channels=16, out_channels=32, kernel_size=3, padding=1)
+        self.conv3 = nn.Conv2d(in_channels=32, out_channels=32, kernel_size=3, padding=1)
+        self.conv4 = nn.Conv2d(in_channels=32, out_channels=32, kernel_size=3, padding=1)
+        self.conv5 = nn.Conv2d(in_channels=32, out_channels=32, kernel_size=3, padding=1)
         # self.convLSTM = ConvLSTM(input_channels=32, hidden_channels=[16, self.last_lstm_dim], kernel_size=3)
         self.wv = Pic2Vector()
         self.self_attention = MultiHeadedAttention(h=4, d_model=32)
@@ -59,6 +62,10 @@ class Shared(nn.Module):
         x = input
         x = F.relu(self.conv1(x))
         x = F.relu(self.conv2(x))
+        x = F.relu(self.conv3(x))
+        x = F.relu(self.conv4(x))
+        x = F.relu(self.conv5(x))
+
         # x, self.initial_state = self.convLSTM(x, self.initial_state)    # will change the initial state
         # print(x.size())
         x = self.wv(x)

@@ -109,6 +109,10 @@ class RtsUtils:
         self.last_hp_self, self.last_hp_oppo = hp_self, hp_oppo
         # if reward_self > 0:
         #     print(reward_self)
+        if self.get_winner() == self.player:
+            reward_self += 100
+        # else:
+        #     return 0
         return reward_self
 
     def get_self_units(self):
