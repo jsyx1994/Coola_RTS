@@ -14,7 +14,7 @@ class ActorHead(nn.Module):
         assert model_name in units_type
         self.model_name = model_name
 
-        self.fc1 = nn.Linear(in_features=in_features + 16 * map_size[0] * map_size[1], out_features=256)
+        self.fc1 = nn.Linear(in_features=in_features + map_size[0] * map_size[1], out_features=256)
         self.fc2 = nn.Linear(in_features=256, out_features=128)
         self.fc3 = nn.Linear(in_features=128, out_features=128)
         self.fc4 = nn.Linear(in_features=128, out_features=128)
@@ -67,21 +67,6 @@ class ActorHead(nn.Module):
         # channel_location[0][loc[0]][loc[1]] = 1
         # print(channel_location.size())
         # print(x.size())
-        x = torch.cat((x, channel_location), dim=1)
-        x = torch.cat((x, channel_location), dim=1)
-        x = torch.cat((x, channel_location), dim=1)
-        x = torch.cat((x, channel_location), dim=1)
-        x = torch.cat((x, channel_location), dim=1)
-        x = torch.cat((x, channel_location), dim=1)
-        x = torch.cat((x, channel_location), dim=1)
-        x = torch.cat((x, channel_location), dim=1)
-        x = torch.cat((x, channel_location), dim=1)
-        x = torch.cat((x, channel_location), dim=1)
-        x = torch.cat((x, channel_location), dim=1)
-        x = torch.cat((x, channel_location), dim=1)
-        x = torch.cat((x, channel_location), dim=1)
-        x = torch.cat((x, channel_location), dim=1)
-        x = torch.cat((x, channel_location), dim=1)
         x = torch.cat((x, channel_location), dim=1)
         # print(x.size())
         x = x.view(batch_size, -1)
