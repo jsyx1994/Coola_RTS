@@ -183,7 +183,7 @@ class SocketWrapperAI:
         # pi_sa = worker.forward(input=state_batch, info=location_batch).gather(1, action_batch.unsqueeze(1)).squeeze()
         # print('pi(a|s)', pi_sa)
         policy = actor(input=state_batch, info=location_batch)
-        entropy = -torch.sum(policy[0] * torch.log(policy[0]))
+        entropy = -torch.sum(policy[0] * torch.log(policy[0] + 1e-5))
         print(entropy)
 
         log_pi_sa = torch.log(policy.gather(1, action_batch.unsqueeze(1)).squeeze())
@@ -195,7 +195,7 @@ class SocketWrapperAI:
         # entropy = -torch.sum(policy[0] * torch.log(policy[0]))
 
         pg_loss = log_pi_sa * td_error
-        ac_loss = -pg_loss.mean() + F.mse_loss(targets, predicts) - entropy
+        ac_loss = -pg_loss.mean() + F.mse_loss(targets, predicts) - 0.01 * entropy
 
         print("policy_loss:", pg_loss.mean())
         print("ac_loss:", -pg_loss.mean() + F.mse_loss(targets, predicts))

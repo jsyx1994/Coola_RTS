@@ -21,6 +21,7 @@ class ActorHead(nn.Module):
         self.fc5 = nn.Linear(in_features=128, out_features=128)
         self.fc6 = nn.Linear(in_features=128, out_features=128)
         self.fc7 = nn.Linear(in_features=128, out_features=128)
+        self.fc7_bn = nn.BatchNorm1d(128)
         self.logits = functools.partial(nn.Linear, in_features=128)
 
         if model_name == 'Worker':
@@ -57,12 +58,12 @@ class ActorHead(nn.Module):
         x = x.view((batch_size, -1, map_size[0], map_size[1]))
         loc = loc.view((batch_size,2))
 
-        channel_location = torch.ones((batch_size, 1, map_size[0], map_size[1]))
+        channel_location = torch.zeros((batch_size, 1, map_size[0], map_size[1]))
         # torch.scatter()
         for b in range(batch_size):
             x_, y_,  = loc[b]
             # print(loc[b])
-            channel_location[b][0][x_][y_] = 100
+            channel_location[b][0][x_][y_] = 1
             # print(channel_location[b])
         # channel_location[0][loc[0]][loc[1]] = 1
         # print(channel_location.size())
@@ -78,7 +79,12 @@ class ActorHead(nn.Module):
         x = F.relu(self.fc4(x))
         x = F.relu(self.fc5(x))
         x = F.relu(self.fc6(x))
-        x = F.relu(self.fc7(x))
+        x = self.fc7(x)
+        if x.size(0) != 1:
+            x = F.relu(self.fc7_bn(x))
+            print('linear batch normed')
+        else:
+            x = F.relu(x)
         x = F.softmax(self.logits(x), dim=-1)
         return x
 
