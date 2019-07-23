@@ -22,5 +22,5 @@ class Environment:
             raise Exception
         gs = msg.split('\n')[1]
         gs = json.loads(gs)
-        self.rts_utils.reset_game_state(gs,player)
+        self.rts_utils.reset_game_state(gs, player)
         return self.rts_utils.get_rl_bundle()

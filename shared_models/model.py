@@ -129,7 +129,7 @@ class ActorCritic(nn.Module):
 class TestLeakModel(nn.Module):
     def __init__(self):
         super(TestLeakModel,self).__init__()
-        self.conv1 = nn.Conv2d(in_channels=18, out_channels=16, kernel_size=3, padding=1)   # WEIGHTs ARE INITED
+        self.conv1 = nn.Conv2d(in_channels=20, out_channels=16, kernel_size=3, padding=1)   # WEIGHTs ARE INITED
         self.conv2 = nn.Conv2d(in_channels=16, out_channels=16, kernel_size=3,
                                padding=1)  # WEIGHTs ARE INITED
         self.conv3 = nn.Conv2d(in_channels=16, out_channels=16, kernel_size=3, padding=1)
@@ -158,7 +158,7 @@ class TestLeakModel(nn.Module):
         x = self.fc5(x)
         x = self.fc6(x)
 
-        x = F.softmax(x)
+        x = F.softmax(x,dim=1)
         return x
 
 def test():
@@ -263,10 +263,35 @@ def test4():
     pass
 
 def test5():
-    loc = torch.randn(20, 2)
+    loc = torch.tensor((7, 7))
+    s = torch.zeros(1,18,8,8)
     net = ActorCritic(actor='Worker')
-    net.forward(torch.randn(20,18,8,8), info=loc)
+
+    print(net.forward(s, info=loc))
+    loc = torch.tensor((6, 7))
+    print(net.forward(s, info=loc))
+
+def test_sensitive():
+    net = TestLeakModel()
+    s = torch.rand(1,18,8,8)
+    x1 = torch.zeros(1,1,8,8)
+    x1[0][0][1][1] = 1
+    x2 = torch.zeros(1, 1, 8, 8)
+    x2[0][0][0][7] = 1
+    # print(net(torch.cat((s,x1),dim=1)))
+    # print(net(torch.cat((s,x2),dim=1)))
+    #
+    x1.fill_(7/7)
+    y1 = torch.zeros(x1.shape)
+    y1.fill_(1/7)
+    print(net(torch.cat((s, x1, y1), dim=1)))
+
+    x1.fill_(1/7)
+    y1.fill_(2/7)
+
+    print(net(torch.cat((s,x1,y1),dim=1)))
+
 
 if __name__ == '__main__':
-    test5()
+    test_sensitive()
     pass

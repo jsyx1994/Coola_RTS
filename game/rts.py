@@ -110,7 +110,7 @@ class RtsUtils:
         # if reward_self > 0:
         #     print(reward_self)
         if self.get_winner() == self.player:
-            reward_self += 100
+            reward_self += 10
         # else:
         #     return 0
         return reward_self
@@ -175,24 +175,26 @@ class RtsUtils:
 
         for unit in units:
             _player = unit['player']
-            x = unit['x']
-            y = unit['y']
+            _type = unit['type']
+            x = int(unit['x'])
+            y = int(unit['y'])
             # neutral
             if _player == -1:
-                channel_resource[x][y] = unit['resources']
+                channel_resource[x][y] = int(unit['resources'])
+                # channel_resource[x][y] = 1
 
             elif _player == current_player:
                 # get the index of this type
-                idx = type_idx[unit['type']]
+                idx = type_idx[_type]
                 channel_self_type[idx][x][y] = 1
-                channel_self_hp[x][y] = unit['hitpoints']
-                channel_self_resource_carried[x][y] = unit['resources']
+                channel_self_hp[x][y] = int(unit['hitpoints'])
+                channel_self_resource_carried[x][y] = int(unit['resources'])
 
             else:
-                idx = type_idx[unit['type']]
+                idx = type_idx[_type]
                 channel_enemy_type[idx][x][y] = 1
-                channel_enemy_hp[x][y] = unit['hitpoints']
-                channel_enemy_resource_carried[x][y] = unit['resources']
+                channel_enemy_hp[x][y] = int(unit['hitpoints'])
+                channel_enemy_resource_carried[x][y] = int(unit['resources'])
 
         # print(spatial_features)
         # print(spatial_features.shape)
