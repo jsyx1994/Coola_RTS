@@ -68,33 +68,50 @@ class ConvLSTM(nn.Module):
             setattr(self, name, cell)
             self._all_layers.append(cell)
 
-    def forward(self, input):
-        internal_state = []
+    # def forward(self, input):
+    #     internal_state = []
+    #     outputs = []
+    #     print(self.step)
+    #
+    #     for step in range(self.step):
+    #         x = input
+    #         for i in range(self.num_layers):
+    #             # all cells are initialized in the first step
+    #             name = 'cell{}'.format(i)
+    #             if step == 0:
+    #                 bsize, _, height, width = x.size()
+    #                 (h, c) = getattr(self, name).init_hidden(batch_size=bsize, hidden=self.hidden_channels[i],
+    #                                                          shape=(height, width))
+    #                 internal_state.append((h, c))
+    #
+    #             # do forward
+    #             (h, c) = internal_state[i]
+    #             x, new_c = getattr(self, name)(x, h, c)
+    #             internal_state[i] = (x, new_c)
+    #         # only record effective steps
+    #         if step in self.effective_step:
+    #             outputs.append(x)
+    #     return outputs, (x, new_c)
+
+    def forward(self, input, step=0, internal_state=[]):
         outputs = []
-        print(self.step)
+        x = input
+        for i in range(self.num_layers):
+            # all cells are initialized in the first step
+            name = 'cell{}'.format(i)
+            if step == 0:
+                bsize, _, height, width = x.size()
+                (h, c) = getattr(self, name).init_hidden(batch_size=bsize, hidden=self.hidden_channels[i],
+                                                         shape=(height, width))
+                internal_state.append((h, c))
 
-
-        for step in range(self.step):
-            x = input
-            for i in range(self.num_layers):
-                # all cells are initialized in the first step
-                name = 'cell{}'.format(i)
-                if step == 0:
-                    bsize, _, height, width = x.size()
-                    (h, c) = getattr(self, name).init_hidden(batch_size=bsize, hidden=self.hidden_channels[i],
-                                                             shape=(height, width))
-                    internal_state.append((h, c))
-
-                # do forward
-                (h, c) = internal_state[i]
-                x, new_c = getattr(self, name)(x, h, c)
-                internal_state[i] = (x, new_c)
-            # only record effective steps
-            if step in self.effective_step:
-                outputs.append(x)
-
-        return outputs, (x, new_c)
-
+            # do forward
+            (h, c) = internal_state[i]
+            x, new_c = getattr(self, name)(x, h, c)
+            internal_state[i] = (x, new_c)
+        # only record effective steps
+        # outputs.append(x)
+        return x, internal_state
 
 if __name__ == '__main__':
     # gradient check

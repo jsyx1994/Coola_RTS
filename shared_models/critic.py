@@ -11,6 +11,10 @@ class CriticHead(nn.Module):
         self.fc1 = nn.Linear(in_features=in_features, out_features=256)
         self.fc2 = nn.Linear(256, 64)
         self.fc3 = nn.Linear(64, 1)
+        self.bn1 = nn.BatchNorm1d(256)
+        self.bn2 = nn.BatchNorm1d(64)
+        self.bn3 = nn.BatchNorm1d(1)
+
         try:
             self.load_state_dict(torch.load(model_saved_dir + '/critic_head.pt'))
         except FileNotFoundError as e:
@@ -25,8 +29,8 @@ class CriticHead(nn.Module):
 
     def forward(self, input):
         x = input
-        x = F.relu(self.fc1(x))
-        x = F.relu(self.fc2(x))
-        x = self.fc3(x)
+        x = F.relu(self.bn1(self.fc1(x)))
+        x = F.relu(self.bn2(self.fc2(x)))
+        x = self.bn3(self.fc3(x))
         return x
 

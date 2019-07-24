@@ -39,7 +39,6 @@ class Shared(nn.Module):
         super(Shared, self).__init__()
         self.minimap_size = minimap_size
         self.input_channel = input_channel
-        self.initial_state = []
         self.last_lstm_dim = 32
         self.last_shared_layer_dim = minimap_size[0] * minimap_size[1] * self.last_lstm_dim    # calc the output dim of the net
 
@@ -52,7 +51,8 @@ class Shared(nn.Module):
         self.conv2_bn = nn.BatchNorm2d(32)
         self.conv3_bn = nn.BatchNorm2d(32)
 
-        # self.convLSTM = ConvLSTM(input_channels=32, hidden_channels=[16, self.last_lstm_dim], kernel_size=3)
+        self.convLSTM = ConvLSTM(input_channels=32, hidden_channels=[16, self.last_lstm_dim], kernel_size=3)
+
         self.wv = Pic2Vector()
         self.self_attention = MultiHeadedAttention(h=4, d_model=32)
         self.flatten = Flatten()
@@ -61,8 +61,10 @@ class Shared(nn.Module):
         except FileNotFoundError as e:
             print(e, ', Model file will be touched')
             torch.save(self.state_dict(), model_saved_dir + '/shared.pt')
+        self.internal_state = []
+        print(self.internal_state)
 
-    def forward(self, input):
+    def forward(self, input,step):
         x = input
         x = self.conv1_bn(F.relu(self.conv1(x)))
         x = self.conv2_bn(F.relu(self.conv2(x)))
@@ -70,7 +72,7 @@ class Shared(nn.Module):
         # x = F.relu(self.conv4(x))
         # x = F.relu(self.conv5(x))
 
-        # x, self.initial_state = self.convLSTM(x, self.initial_state)    # will change the initial state
+        x, self.internal_state = self.convLSTM(x, step, self.internal_state)    # will change the initial state
         # print(x.size())
         x = self.wv(x)
         # print("wv size:", x.size())
@@ -110,8 +112,8 @@ class ActorCritic(nn.Module):
         self.pi_out = ActorHead(self.in_features, actor)   # loads saved actor head weights
         self.v_out = CriticHead(self.in_features)  # loads saved critic head weights
 
-    def forward(self, input, info='critic'):
-        x = self.base(input)
+    def forward(self, input, info='critic', step=0):
+        x = self.base(input, step)
         # print(x.size())
         if isinstance(info, torch.Tensor):
             return self.pi_out.forward(x, loc=info)

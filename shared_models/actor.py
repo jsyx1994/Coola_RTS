@@ -16,12 +16,7 @@ class ActorHead(nn.Module):
 
         self.fc1 = nn.Linear(in_features=in_features + 2 * map_size[0] * map_size[1], out_features=256)
         self.fc2 = nn.Linear(in_features=256, out_features=128)
-        self.fc3 = nn.Linear(in_features=128, out_features=128)
-        self.fc4 = nn.Linear(in_features=128, out_features=128)
-        self.fc5 = nn.Linear(in_features=128, out_features=128)
-        self.fc6 = nn.Linear(in_features=128, out_features=128)
-        self.fc7 = nn.Linear(in_features=128, out_features=128)
-        self.fc7_bn = nn.BatchNorm1d(128)
+        self.fc2_bn = nn.BatchNorm1d(128)
         self.logits = functools.partial(nn.Linear, in_features=128)
 
         if model_name == 'Worker':
@@ -83,16 +78,12 @@ class ActorHead(nn.Module):
         # print(x.size())
         x = F.relu(self.fc1(x))
         x = F.relu(self.fc2(x))
-        x = F.relu(self.fc3(x))
-        x = F.relu(self.fc4(x))
-        x = F.relu(self.fc5(x))
-        x = F.relu(self.fc6(x))
-        x = self.fc7(x)
-        if x.size(0) != 1:
-            x = F.relu(self.fc7_bn(x))
-            print('linear batch normed')
-        else:
-            x = F.relu(x)
+        # x = self.fc2(x)
+        # if x.size(0) != 1:
+        #     x = F.relu(self.fc7_bn(x))
+        #     print('linear batch normed')
+        # else:
+        #     x = F.relu(x)
         x = F.softmax(self.logits(x), dim=-1)
         return x
 

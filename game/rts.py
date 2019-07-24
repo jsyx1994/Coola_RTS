@@ -54,6 +54,7 @@ class RtsUtils:
         self._busy = self.get_self_busy()
         self.construct_game_map()
         # print('hp', self.get_reward_test())
+        # print(player)
 
     def get_player(self):
         return self.player

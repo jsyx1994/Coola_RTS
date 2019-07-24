@@ -48,7 +48,7 @@ class ServerAI:
 
 class SocketWrapperAI:
     DEBUG = 0
-    GAMMA = 1
+    GAMMA = .9999
     EPSILON = 1e-10
 
     def __init__(self, client_socket: socket.socket, client_number):
@@ -67,6 +67,7 @@ class SocketWrapperAI:
         self.writer = SummaryWriter()
         self.writer.add_graph(self.actor_map['Worker'], torch.rand(1,18,8,8))
         self.n_iter = 0
+        self.time_step = 0
 
     def init_new_episode(self):
         if self.DEBUG == 3:
@@ -80,11 +81,15 @@ class SocketWrapperAI:
         self.worker_memory = []
         self.state = None
         self.G0 = 0
+        self.time_step = 0
+
 
     def select_action(self, unit_nn, state, info):
         with torch.no_grad():
-            policy = unit_nn(state, info)
+            policy = unit_nn.forward(state, info, step=self.time_step)
+            self.time_step += 1
             # self.writer.add_histogram('policy_out', policy.numpy(), self.n_iter)
+            print(self.time_step)
             print(policy)
             return int(Categorical(policy).sample()[0])  # a(t)
 
@@ -137,7 +142,7 @@ class SocketWrapperAI:
                 gs = json.loads(gs)
                 player = int(msg.split()[1])
                 self.state, _, _, = env.reset(gs, player)
-                print(player)
+                # print(player)
             else:
                 while (not done):
                     state = self.state
@@ -173,7 +178,6 @@ class SocketWrapperAI:
         # print('reward', len(batch.reward))
         # print('loc', len(batch.location))
         optimizer = optim.Adam(params=actor.parameters(), lr=1e-3)
-
         state_batch = torch.Tensor(batch.state)
         next_state_batch = torch.Tensor(batch.next_state)
         action_batch = torch.LongTensor(batch.action)
@@ -183,6 +187,7 @@ class SocketWrapperAI:
 
         # print(location_batch)
         v_t = actor(input=state_batch, info='critic')
+        print(v_t)
         # print('v_t',v_t.size())
         v_t_1 = actor(input=next_state_batch, info='critic')
         # print('v_t_1',v_t_1.size())
@@ -212,7 +217,7 @@ class SocketWrapperAI:
         print('ac_loss plus entropy:', ac_loss)
         # print('critic:', v_t)
         # print(ac_loss.size())
-        if self.n_iter % 10 == 0:
+        if self.n_iter % 1 == 0:
             self.writer.add_scalar('policy_loss', pg_loss, self.n_iter)
             self.writer.add_scalar('value_loss', value_loss, self.n_iter)
             self.writer.add_scalar('entropy', entropy, self.n_iter)
