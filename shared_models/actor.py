@@ -14,10 +14,13 @@ class ActorHead(nn.Module):
         assert model_name in units_type
         self.model_name = model_name
 
-        self.fc1 = nn.Linear(in_features=in_features + 2 * map_size[0] * map_size[1], out_features=256)
+        self.fc1 = nn.Linear(in_features=in_features + map_size[0] * map_size[1], out_features=256)
         self.fc2 = nn.Linear(in_features=256, out_features=128)
+        self.fc3 = nn.Linear(in_features=128, out_features=64)
+        self.fc1_bn = nn.BatchNorm1d(256)
         self.fc2_bn = nn.BatchNorm1d(128)
-        self.logits = functools.partial(nn.Linear, in_features=128)
+        self.fc3_bn = nn.BatchNorm1d(64)
+        self.logits = functools.partial(nn.Linear, in_features=64)
 
         if model_name == 'Worker':
             self.logits = self.logits(out_features=WorkerAction.NUMBER_OF_ACTIONS)
@@ -51,33 +54,34 @@ class ActorHead(nn.Module):
         x = input
         batch_size = x.size(0)
         x = x.view((batch_size, -1, map_size[0], map_size[1]))
-        loc = loc.view((batch_size,2))
 
-        # channel_location = torch.zeros((batch_size, 1, map_size[0], map_size[1]))
-        x_f = torch.zeros((batch_size, 1, map_size[0], map_size[1]))
-        y_f = torch.zeros((batch_size, 1, map_size[0], map_size[1]))
+        channel_location = torch.zeros((batch_size, 1, map_size[0], map_size[1]))
+        # x_f = torch.zeros((batch_size, 1, map_size[0], map_size[1]))
+        # y_f = torch.zeros((batch_size, 1, map_size[0], map_size[1]))
 
         # torch.scatter()
         for b in range(batch_size):
             x_, y_,  = loc[b]
             # print(loc[b])
-            # channel_location[b][0][x_][y_] = 1
-            x_f[b][0].fill_(x_)
-            y_f[b][0].fill_(y_)
+            channel_location[b][0][x_][y_] = 1
+            # x_f[b][0].fill_(x_)
+            # y_f[b][0].fill_(y_)
         # print(channel_location)
             # print(channel_location[b])
         # channel_location[0][loc[0]][loc[1]] = 1
         # print(channel_location.size())
         # print(x.size())
-        x = torch.cat((x, x_f, y_f), dim=1)
+        x = torch.cat((x, channel_location), dim=1)
         # print(x[0][-1])
         # print(x[0][-2])
         # print(x.size())
         x = x.view(batch_size, -1)
 
         # print(x.size())
-        x = F.relu(self.fc1(x))
-        x = F.relu(self.fc2(x))
+        x = self.fc1_bn(F.relu(self.fc1(x)))
+        x = self.fc2_bn(F.relu(self.fc2(x)))
+        x = self.fc3_bn(F.relu(self.fc3(x)))
+
         # x = self.fc2(x)
         # if x.size(0) != 1:
         #     x = F.relu(self.fc7_bn(x))

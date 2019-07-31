@@ -29,8 +29,8 @@ class CriticHead(nn.Module):
 
     def forward(self, input):
         x = input
-        x = F.relu(self.bn1(self.fc1(x)))
-        x = F.relu(self.bn2(self.fc2(x)))
-        x = self.bn3(self.fc3(x))
+        x = self.bn1(F.relu(self.fc1(x)))
+        x = self.bn2(F.relu(self.fc2(x)))
+        x = self.fc3(x)
         return x
 

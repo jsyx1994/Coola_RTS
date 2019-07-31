@@ -42,19 +42,22 @@ class Shared(nn.Module):
         self.last_lstm_dim = 32
         self.last_shared_layer_dim = minimap_size[0] * minimap_size[1] * self.last_lstm_dim    # calc the output dim of the net
 
-        self.conv1 = nn.Conv2d(in_channels=input_channel, out_channels=16, kernel_size=3, padding=1)   # WEIGHTs ARE INITED
-        self.conv2 = nn.Conv2d(in_channels=16, out_channels=32, kernel_size=3, padding=1)
-        self.conv3 = nn.Conv2d(in_channels=32, out_channels=32, kernel_size=3, padding=1)
-        # self.conv4 = nn.Conv2d(in_channels=32, out_channels=32, kernel_size=3, padding=1)
+        self.conv1 = nn.Conv2d(in_channels=input_channel, out_channels=128, kernel_size=3, padding=1)   # WEIGHTs ARE INITED
+        self.conv2 = nn.Conv2d(in_channels=128, out_channels=64, kernel_size=3, padding=1)
+        self.conv3 = nn.Conv2d(in_channels=64, out_channels=32, kernel_size=3, padding=1)
+        self.conv4 = nn.Conv2d(in_channels=32, out_channels=32, kernel_size=3, padding=1)
         # self.conv5 = nn.Conv2d(in_channels=32, out_channels=32, kernel_size=3, padding=1)
-        self.conv1_bn = nn.BatchNorm2d(16)
-        self.conv2_bn = nn.BatchNorm2d(32)
+        self.conv1_bn = nn.BatchNorm2d(128)
+        self.conv2_bn = nn.BatchNorm2d(64)
         self.conv3_bn = nn.BatchNorm2d(32)
+        self.conv4_bn = nn.BatchNorm2d(32)
 
-        self.convLSTM = ConvLSTM(input_channels=32, hidden_channels=[16, self.last_lstm_dim], kernel_size=3)
+        self.convLSTM = ConvLSTM(input_channels=32, hidden_channels=[32, self.last_lstm_dim], kernel_size=3)
+        self.convLSTM_bn = nn.BatchNorm2d(32)
 
         self.wv = Pic2Vector()
         self.self_attention = MultiHeadedAttention(h=4, d_model=32)
+
         self.flatten = Flatten()
         try:
             self.load_state_dict(torch.load(model_saved_dir + '/shared.pt'))
@@ -69,14 +72,15 @@ class Shared(nn.Module):
         x = self.conv1_bn(F.relu(self.conv1(x)))
         x = self.conv2_bn(F.relu(self.conv2(x)))
         x = self.conv3_bn(F.relu(self.conv3(x)))
-        # x = F.relu(self.conv4(x))
+        x = self.conv4_bn(F.relu(self.conv4(x)))
         # x = F.relu(self.conv5(x))
 
         x, self.internal_state = self.convLSTM(x, step, self.internal_state)    # will change the initial state
+        x = self.convLSTM_bn(F.relu(x))
         # print(x.size())
         x = self.wv(x)
         # print("wv size:", x.size())
-        x = F.relu(self.self_attention(x, x, x))    # apply relu activation for the returning Linear layer
+        x = F.relu(self.self_attention(x, x, x))   # apply relu activation for the returning Linear layer
         # print(x.size())
         # print(internal_state[1][1].size())
         x = self.flatten(x)

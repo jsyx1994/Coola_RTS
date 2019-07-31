@@ -40,7 +40,7 @@ class RtsUtils:
         self.last_hp_oppo = 0
         self.last_hp_self = 0
 
-    def reset_game_state(self, gs: dict, player: int):
+    def turn_game_state(self, gs: dict, player: int):
         """
         :param gs: game state dict from java end
         :param player: current player
@@ -110,8 +110,8 @@ class RtsUtils:
         self.last_hp_self, self.last_hp_oppo = hp_self, hp_oppo
         # if reward_self > 0:
         #     print(reward_self)
-        if self.get_winner() == self.player:
-            reward_self += 10
+        # if self.get_winner() == self.player:
+        #     reward_self += 10
         # else:
         #     return 0
         return reward_self
@@ -196,7 +196,6 @@ class RtsUtils:
                 channel_enemy_type[idx][x][y] = 1
                 channel_enemy_hp[x][y] = int(unit['hitpoints'])
                 channel_enemy_resource_carried[x][y] = int(unit['resources'])
-
         # print(spatial_features)
         # print(spatial_features.shape)
         self.state = spatial_features

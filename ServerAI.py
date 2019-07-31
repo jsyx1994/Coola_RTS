@@ -47,9 +47,12 @@ class ServerAI:
 
 
 class SocketWrapperAI:
-    DEBUG = 0
-    GAMMA = .9999
+    DEBUG = 1
+    GAMMA = .99
     EPSILON = 1e-10
+    MAX_GRAD_NORM = .5
+    N_STEP = 1
+    GAMMA **= N_STEP
 
     def __init__(self, client_socket: socket.socket, client_number):
         self.client_socket = client_socket
@@ -83,14 +86,15 @@ class SocketWrapperAI:
         self.G0 = 0
         self.time_step = 0
 
-
     def select_action(self, unit_nn, state, info):
+        unit_nn.eval()
         with torch.no_grad():
             policy = unit_nn.forward(state, info, step=self.time_step)
             self.time_step += 1
             # self.writer.add_histogram('policy_out', policy.numpy(), self.n_iter)
-            print(self.time_step)
-            print(policy)
+            # print(self.time_step)
+            if self.DEBUG >= 1:
+                print(policy)
             return int(Categorical(policy).sample()[0])  # a(t)
 
     def sample(self, state):
@@ -102,7 +106,7 @@ class SocketWrapperAI:
         for unit in assignable:
             location = int(unit['x']), int(unit['y'])
             actor = unit['type']
-            loc = torch.LongTensor(location)
+            loc = torch.LongTensor(location).view((-1, 2))
             if actor == 'Worker':   # if is for test
                 action = self.select_action(self.actor_map[actor], state, info=loc)
                 env.rts_utils.translate_action(uid=unit['ID'], location=location, bot_type=actor, act_code=action)
@@ -133,30 +137,25 @@ class SocketWrapperAI:
                 first_step = False
                 done = False
                 self.n_iter += 1
-                msg = str(client_socket.recv(10240).decode())
-                if msg == 0:
-                    print('break')
-                    break
-                client_socket.sendall(('ack\n').encode())
-                gs = msg.split('\n')[1]
-                gs = json.loads(gs)
-                player = int(msg.split()[1])
-                self.state, _, _, = env.reset(gs, player)
+                self.state, _, _, = env.reset(client_socket)
                 # print(player)
             else:
                 while (not done):
                     state = self.state
                     pa, act_loc = self.sample(state)
                     # print(act_loc)
-                    next_state, reward, done = env.step(client_socket, pa, env.rts_utils.get_player())
-                    self.state = next_state
+                    next_state, reward, done = env.step(client_socket, pa)
+                    # print(state == next_state)
+                    # np.set_printoptions(threshold=5000)
                     # for act, _ in act_loc['Worker']:
                     #     if act == WorkerAction.DOWN:
                     #         reward += 1
-                    reward *= 10
+                    # reward *= 10
                     self.G0 += reward
                     self.record(memory=self.worker_memory, state=state, act_loc=act_loc['Worker'],
                                 next_state=next_state, reward=reward)
+                    # self.state = next_state
+                    self.state = next_state
 
                 self.G0s.append(self.G0)
                 self.plot_durations()
@@ -177,17 +176,37 @@ class SocketWrapperAI:
         # print('act', len(batch.action))
         # print('reward', len(batch.reward))
         # print('loc', len(batch.location))
-        optimizer = optim.Adam(params=actor.parameters(), lr=1e-3)
+        actor.train()
+        optimizer = optim.RMSprop(params=actor.parameters(), lr=7e-4)
         state_batch = torch.Tensor(batch.state)
         next_state_batch = torch.Tensor(batch.next_state)
         action_batch = torch.LongTensor(batch.action)
         reward_batch = torch.Tensor(batch.reward)
         # print(batch.location)
         location_batch = torch.cat(batch.location)
+        print(location_batch.size())
+        # print('s', len(state_batch))
+        # print('s\'', len(next_state_batch))
+        # print('act', len(action_batch))
+        # print('reward', len(reward_batch))
+        # print('loc', len(location_batch))
+        if self.N_STEP != 1 and location_batch.size()[0] >= self.N_STEP:
+            state_batch = state_batch[:-self.N_STEP + 1]
+            location_batch = location_batch[:-self.N_STEP + 1]
+            action_batch = action_batch[:-self.N_STEP + 1]
+            next_state_batch = next_state_batch[self.N_STEP-1:]
+            reward_batch = reward_batch[self.N_STEP-1:]
+            print('s', len(state_batch))
+            print('s\'', len(next_state_batch))
+            print('act', len(action_batch))
+            print('reward', len(reward_batch))
+            print('loc', len(location_batch))
 
         # print(location_batch)
+        torch.set_printoptions(threshold=5000)
         v_t = actor(input=state_batch, info='critic')
-        print(v_t)
+        if self.DEBUG:
+            print(v_t)
         # print('v_t',v_t.size())
         v_t_1 = actor(input=next_state_batch, info='critic')
         # print('v_t_1',v_t_1.size())
@@ -197,24 +216,18 @@ class SocketWrapperAI:
         # print('pi(a|s)', pi_sa)
         policy = actor(input=state_batch, info=location_batch)
         entropy = -torch.sum(policy[0] * torch.log(policy[0] + self.EPSILON))
-        print(entropy)
 
         log_pi_sa = torch.log(policy.gather(1, action_batch.unsqueeze(1)).squeeze() + self.EPSILON)
         # print('log_pi_sa', log_pi_sa.size())
-        targets = reward_batch.unsqueeze(1) + self.GAMMA * v_t_1
+        targets = reward_batch.unsqueeze(1) + v_t_1
         # print('targets', targets.size())
         predicts = v_t
         td_error = targets - predicts
-        # entropy = -torch.sum(policy[0] * torch.log(policy[0]))
 
         pg_loss = (-log_pi_sa * td_error).mean()
         value_loss = F.mse_loss(targets, predicts)
 
-        ac_loss = pg_loss + value_loss - 1e-4 * entropy
-        print("policy_loss:", pg_loss)
-        print("ac_loss:", pg_loss + value_loss)
-        print("entropy:", entropy)
-        print('ac_loss plus entropy:', ac_loss)
+        ac_loss = pg_loss + .5 * value_loss - .0001 * entropy
         # print('critic:', v_t)
         # print(ac_loss.size())
         if self.n_iter % 1 == 0:
@@ -230,6 +243,7 @@ class SocketWrapperAI:
         # print('loss', pg_loss.mean().size(), F.mse_loss(targets, predicts).size())
         optimizer.zero_grad()
         ac_loss.backward()
+        torch.nn.utils.clip_grad_norm_(actor.parameters(), self.MAX_GRAD_NORM)
         optimizer.step()
 
         # print(state_batch.size())
@@ -255,6 +269,7 @@ class SocketWrapperAI:
             plt.plot(means.numpy())
 
         plt.pause(0.001)  # pause a bit so that plots are updated
+
 
 def test():
     x = torch.randn((1, 18, 8, 8))

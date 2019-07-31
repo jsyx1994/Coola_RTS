@@ -94,7 +94,7 @@ class ConvLSTM(nn.Module):
     #     return outputs, (x, new_c)
 
     def forward(self, input, step=0, internal_state=[]):
-        outputs = []
+        # outputs = []
         x = input
         for i in range(self.num_layers):
             # all cells are initialized in the first step
