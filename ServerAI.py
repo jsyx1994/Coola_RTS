@@ -17,6 +17,8 @@ from collections import namedtuple
 from game.env import Environment
 from torch.utils.tensorboard import SummaryWriter
 
+np.set_printoptions(threshold=5000)
+
 Transition = namedtuple('Transition',
                         ('state', 'action', 'next_state', 'reward', 'location'))
 
@@ -47,12 +49,13 @@ class ServerAI:
 
 
 class SocketWrapperAI:
-    DEBUG = 1
+    DEBUG = 0
     GAMMA = .99
-    EPSILON = 1e-10
-    MAX_GRAD_NORM = .5
-    N_STEP = 1
-    GAMMA **= N_STEP
+    EPSILON = 1e-6
+    MAX_GRAD_NORM = 5
+
+    N_STEP = 10
+    # GAMMA **= N_STEP
 
     def __init__(self, client_socket: socket.socket, client_number):
         self.client_socket = client_socket
@@ -111,6 +114,7 @@ class SocketWrapperAI:
                 action = self.select_action(self.actor_map[actor], state, info=loc)
                 env.rts_utils.translate_action(uid=unit['ID'], location=location, bot_type=actor, act_code=action)
                 act_loc[actor].append((action, loc))
+                print('worker action', action)
         return env.rts_utils.get_player_action(), act_loc
 
     @staticmethod
@@ -138,22 +142,24 @@ class SocketWrapperAI:
                 done = False
                 self.n_iter += 1
                 self.state, _, _, = env.reset(client_socket)
-                # print(player)
             else:
                 while (not done):
                     state = self.state
                     pa, act_loc = self.sample(state)
-                    # print(act_loc)
                     next_state, reward, done = env.step(client_socket, pa)
                     # print(state == next_state)
+                    # if self.time_step == 10:
+                    #     print(env.rts_utils.get_assignable())
+                    #     break
                     # np.set_printoptions(threshold=5000)
-                    # for act, _ in act_loc['Worker']:
-                    #     if act == WorkerAction.DOWN:
-                    #         reward += 1
+                    for act, _ in act_loc['Worker']:
+                        if act == WorkerAction.RIGHT:
+                            reward += 1
                     # reward *= 10
                     self.G0 += reward
-                    self.record(memory=self.worker_memory, state=state, act_loc=act_loc['Worker'],
-                                next_state=next_state, reward=reward)
+                    if act_loc['Worker']:
+                        self.record(memory=self.worker_memory, state=state, act_loc=act_loc['Worker'],
+                                    next_state=next_state, reward=reward)
                     # self.state = next_state
                     self.state = next_state
 
@@ -203,7 +209,7 @@ class SocketWrapperAI:
             print('loc', len(location_batch))
 
         # print(location_batch)
-        torch.set_printoptions(threshold=5000)
+
         v_t = actor(input=state_batch, info='critic')
         if self.DEBUG:
             print(v_t)
@@ -227,7 +233,7 @@ class SocketWrapperAI:
         pg_loss = (-log_pi_sa * td_error).mean()
         value_loss = F.mse_loss(targets, predicts)
 
-        ac_loss = pg_loss + .5 * value_loss - .0001 * entropy
+        ac_loss = pg_loss + value_loss
         # print('critic:', v_t)
         # print(ac_loss.size())
         if self.n_iter % 1 == 0:

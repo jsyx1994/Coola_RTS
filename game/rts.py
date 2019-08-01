@@ -53,6 +53,7 @@ class RtsUtils:
         self.first = True
         self._busy = self.get_self_busy()
         self.construct_game_map()
+        # print(self.game_map)
         # print('hp', self.get_reward_test())
         # print(player)
 
@@ -105,7 +106,7 @@ class RtsUtils:
                 hp_oppo += int(unit['hitpoints'])
         # print(self.player, hp_self, hp_oppo)
         delta_hp_self = hp_self - self.last_hp_self
-        delta_hp_oppo = hp_oppo - self.last_hp_oppo
+        delta_hp_oppo = hp_oppo - self.last_hp_oppoa
         reward_self = delta_hp_self - delta_hp_oppo
         self.last_hp_self, self.last_hp_oppo = hp_self, hp_oppo
         # if reward_self > 0:

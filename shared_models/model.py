@@ -52,8 +52,8 @@ class Shared(nn.Module):
         self.conv3_bn = nn.BatchNorm2d(32)
         self.conv4_bn = nn.BatchNorm2d(32)
 
-        self.convLSTM = ConvLSTM(input_channels=32, hidden_channels=[32, self.last_lstm_dim], kernel_size=3)
-        self.convLSTM_bn = nn.BatchNorm2d(32)
+        # self.convLSTM = ConvLSTM(input_channels=32, hidden_channels=[32, self.last_lstm_dim], kernel_size=3)
+        # self.convLSTM_bn = nn.BatchNorm2d(32)
 
         self.wv = Pic2Vector()
         self.self_attention = MultiHeadedAttention(h=4, d_model=32)
@@ -75,8 +75,8 @@ class Shared(nn.Module):
         x = self.conv4_bn(F.relu(self.conv4(x)))
         # x = F.relu(self.conv5(x))
 
-        x, self.internal_state = self.convLSTM(x, step, self.internal_state)    # will change the initial state
-        x = self.convLSTM_bn(F.relu(x))
+        # x, self.internal_state = self.convLSTM(x, step, self.internal_state)    # will change the initial state
+        # x = self.convLSTM_bn(F.relu(x))
         # print(x.size())
         x = self.wv(x)
         # print("wv size:", x.size())
